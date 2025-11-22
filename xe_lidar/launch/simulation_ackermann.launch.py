@@ -13,6 +13,9 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     package_name = 'xe_lidar'
     pkg_share = FindPackageShare(package=package_name).find(package_name)
+    # Lấy đường dẫn đến lib directory
+    pkg_share_dir = os.path.dirname(pkg_share)  # install/xe_lidar/share -> install/xe_lidar
+    pkg_lib_dir = os.path.join(pkg_share_dir, 'lib', package_name)  # install/xe_lidar/lib/xe_lidar
     
     # World file argument
     world_file_arg = DeclareLaunchArgument(
@@ -76,25 +79,36 @@ def generate_launch_description():
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
     # Delay để đợi robot được spawn và LiDAR sẵn sàng
-    # Dùng ExecuteProcess với đường dẫn đầy đủ thay vì Node để tránh lỗi libexec
-    obstacle_avoidance_script = os.path.join(
-        get_package_share_directory(package_name),
-        '..', 'lib', package_name, 'obstacle_avoidance.py'
-    )
+    # Tạo thư mục libexec và symlink nếu chưa có (để ROS2 tìm thấy)
+    import subprocess
+    pkg_libexec_dir = os.path.join(pkg_share_dir, 'libexec', package_name)
+    pkg_lib_file = os.path.join(pkg_lib_dir, 'obstacle_avoidance.py')
+    pkg_libexec_file = os.path.join(pkg_libexec_dir, 'obstacle_avoidance.py')
     
-    autonomous_drive_node = ExecuteProcess(
-        cmd=['python3', obstacle_avoidance_script,
-             '--ros-args',
-             '-r', '__node:=autonomous_drive',
-             '-p', 'use_sim_time:=true',
-             '-p', 'min_distance:=0.5',
-             '-p', 'safe_distance:=0.8',
-             '-p', 'max_linear_speed:=0.3',
-             '-p', 'max_angular_speed:=1.0',
-             '-p', 'front_angle_range:=60',
-             '-p', 'use_camera:=true',
-             '-p', 'camera_topic:=/camera/image_raw'],
-        output='screen'
+    # Tạo thư mục libexec nếu chưa có
+    os.makedirs(pkg_libexec_dir, exist_ok=True)
+    
+    # Tạo symlink nếu chưa có
+    if not os.path.exists(pkg_libexec_file):
+        if os.path.exists(pkg_lib_file):
+            os.symlink(pkg_lib_file, pkg_libexec_file)
+    
+    # Dùng Node với executable (ROS2 sẽ tìm trong libexec)
+    autonomous_drive_node = Node(
+        package=package_name,
+        executable='obstacle_avoidance.py',
+        name='autonomous_drive',
+        output='screen',
+        parameters=[{
+            'use_sim_time': True,
+            'min_distance': 0.5,
+            'safe_distance': 0.8,
+            'max_linear_speed': 0.3,
+            'max_angular_speed': 1.0,
+            'front_angle_range': 60,
+            'use_camera': True,
+            'camera_topic': '/camera/image_raw'
+        }]
     )
     
     # Delay autonomous drive node để đợi robot spawn và LiDAR sẵn sàng
