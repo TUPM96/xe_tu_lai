@@ -10,9 +10,9 @@
             <rear_left_joint>rear_left_wheel_joint</rear_left_joint>
             <rear_right_joint>rear_right_wheel_joint</rear_right_joint>
             
-            <!-- Steering joints -->
-            <front_left_steering_joint>front_left_steering_joint</front_left_steering_joint>
-            <front_right_steering_joint>front_right_steering_joint</front_right_steering_joint>
+            <!-- Steering joints - plugin có thể yêu cầu tên đơn giản hơn -->
+            <left_steering_joint>front_left_steering_joint</left_steering_joint>
+            <right_steering_joint>front_right_steering_joint</right_steering_joint>
             
             <!-- Geometry -->
             <wheel_separation>0.28</wheel_separation>
