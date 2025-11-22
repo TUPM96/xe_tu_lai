@@ -38,9 +38,16 @@ install(
 )
 
 # Install Python scripts
+# ROS2 sẽ tìm trong libexec trước, sau đó mới tìm trong lib
 install(PROGRAMS
   scripts/obstacle_avoidance.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Cũng cài vào libexec để đảm bảo ROS2 tìm thấy
+install(PROGRAMS
+  scripts/obstacle_avoidance.py
+  DESTINATION libexec/${PROJECT_NAME}
 )
 
 ament_package()

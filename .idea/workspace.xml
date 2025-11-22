@@ -19,7 +19,7 @@
   <component name="ChangeListManager">
     <list default="true" id="ec4f1c6e-154d-4af7-b6da-7aca935664fd" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xe_lidar/launch/simulation_ackermann.launch.py" beforeDir="false" afterPath="$PROJECT_DIR$/xe_lidar/launch/simulation_ackermann.launch.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xe_lidar/description/gazebo_control_ackermann.xacro" beforeDir="false" afterPath="$PROJECT_DIR$/xe_lidar/description/gazebo_control_ackermann.xacro" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -105,7 +105,7 @@
       <workItem from="1755147199245" duration="7962000" />
       <workItem from="1755768249544" duration="868000" />
       <workItem from="1763808330980" duration="748000" />
-      <workItem from="1763809279734" duration="8823000" />
+      <workItem from="1763809279734" duration="9403000" />
     </task>
     <servers />
   </component>
