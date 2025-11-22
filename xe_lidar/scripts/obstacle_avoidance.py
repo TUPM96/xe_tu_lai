@@ -290,11 +290,16 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # Dừng robot trước khi thoát
-        cmd = Twist()
-        node.cmd_vel_pub.publish(cmd)
-        node.destroy_node()
-        rclpy.shutdown()
+        # Dừng robot trước khi thoát (chỉ nếu context còn valid)
+        try:
+            if rclpy.ok():
+                cmd = Twist()
+                node.cmd_vel_pub.publish(cmd)
+        except Exception:
+            pass  # Ignore errors during shutdown
+        finally:
+            node.destroy_node()
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

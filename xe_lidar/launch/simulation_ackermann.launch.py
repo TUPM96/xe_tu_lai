@@ -118,6 +118,7 @@ def generate_launch_description():
     )
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
+    # Delay để đợi robot được spawn và LiDAR sẵn sàng
     autonomous_drive_node = Node(
         package=package_name,
         executable='obstacle_avoidance.py',
@@ -135,6 +136,9 @@ def generate_launch_description():
         }]
     )
     
+    # Delay autonomous drive node để đợi robot spawn và LiDAR sẵn sàng
+    delayed_autonomous_drive = TimerAction(period=8.0, actions=[autonomous_drive_node])
+    
     return LaunchDescription([
         world_file_arg,
         rsp,
@@ -143,6 +147,6 @@ def generate_launch_description():
         delayed_controller_manager,
         delayed_ackermann_spawner,
         delayed_joint_broad_spawner,
-        autonomous_drive_node,
+        delayed_autonomous_drive,
     ])
 
