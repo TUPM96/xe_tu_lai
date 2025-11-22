@@ -1,0 +1,53 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 50  # Hz
+
+    ackermann_steering_controller:
+      type: ackermann_steering_controller/AckermannSteeringController
+
+    joint_broad:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+ackermann_steering_controller:
+  ros__parameters:
+    # Wheel parameters
+    front_left_wheel_name: front_left_wheel_joint
+    front_right_wheel_name: front_right_wheel_joint
+    rear_left_wheel_name: rear_left_wheel_joint
+    rear_right_wheel_name: rear_right_wheel_joint
+    
+    # Steering parameters
+    front_left_steering_name: front_left_steering_joint
+    front_right_steering_name: front_right_steering_joint
+    
+    # Geometry
+    wheel_radius: 0.034
+    wheelbase: 0.4
+    track_width: 0.28
+    
+    # Steering limits
+    max_steer_angle: 0.5236  # ~30 degrees in radians
+    
+    # Frame IDs
+    base_frame_id: base_link
+    odom_frame_id: odom
+    
+    # Enable odometry
+    enable_odom_tf: true
+    publish_rate: 50.0
+    
+    # Command timeout
+    cmd_vel_timeout: 0.5
+    
+    # Open loop control
+    open_loop: false
+    
+    # Velocity limits
+    linear.x.has_velocity_limits: true
+    linear.x.max_velocity: 1.0
+    linear.x.min_velocity: -1.0
+    
+    angular.z.has_velocity_limits: true
+    angular.z.max_velocity: 1.0
+    angular.z.min_velocity: -1.0
+

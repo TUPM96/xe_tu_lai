@@ -1,0 +1,169 @@
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.actions import RegisterEventHandler
+from launch.event_handlers import OnProcessStart
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, Command
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    package_name = 'xe_lidar'
+    
+    # Robot state publisher (sử dụng launch file có sẵn)
+    rsp = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            os.path.join(
+                get_package_share_directory(package_name),
+                'launch',
+                'rsp.launch.py'
+            )
+        ]),
+        launch_arguments={
+            'use_sim_time': 'false',
+            'use_ros2_control': 'true'
+        }.items()
+    )
+    
+    # Twist mux để quản lý các nguồn cmd_vel
+    twist_mux_params = os.path.join(
+        get_package_share_directory(package_name),
+        'config',
+        'twist_mux.yaml'
+    )
+    twist_mux = Node(
+        package='twist_mux',
+        executable='twist_mux',
+        parameters=[twist_mux_params],
+        remappings=[('/cmd_vel_out', '/diff_cont/cmd_vel_unstamped')],
+        output='screen'
+    )
+    
+    # Controller manager
+    robot_description = Command(['ros2 param get --hide-type /robot_state_publisher robot_description'])
+    controller_params_file = os.path.join(
+        get_package_share_directory(package_name),
+        'config',
+        'my_controllers.yaml'
+    )
+    controller_manager = Node(
+        package='controller_manager',
+        executable='ros2_control_node',
+        parameters=[{'robot_description': robot_description}, controller_params_file],
+        output='screen'
+    )
+    
+    # Delay controller manager
+    delayed_controller_manager = TimerAction(period=3.0, actions=[controller_manager])
+    
+    # Spawn controllers
+    diff_drive_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['diff_cont'],
+        output='screen'
+    )
+    
+    delayed_diff_drive_spawner = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            target_action=controller_manager,
+            on_start=[diff_drive_spawner]
+        )
+    )
+    
+    joint_broad_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['joint_broad'],
+        output='screen'
+    )
+    
+    delayed_joint_broad_spawner = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            target_action=controller_manager,
+            on_start=[joint_broad_spawner]
+        )
+    )
+    
+    # LiDAR
+    serial_port_arg = DeclareLaunchArgument(
+        'serial_port',
+        default_value='/dev/ttyUSB0',
+        description='Serial port của RPLIDAR'
+    )
+    
+    scan_mode_arg = DeclareLaunchArgument(
+        'scan_mode',
+        default_value='Sensitivity',
+        description='Chế độ quét của RPLIDAR'
+    )
+    
+    lidar_node = Node(
+        package='rplidar_ros',
+        executable='rplidar_composition',
+        name='rplidar_node',
+        output='screen',
+        parameters=[{
+            'serial_port': LaunchConfiguration('serial_port'),
+            'serial_baudrate': 115200,
+            'frame_id': 'laser_frame',
+            'angle_compensate': True,
+            'scan_mode': LaunchConfiguration('scan_mode')
+        }]
+    )
+    
+    # Camera
+    video_device_arg = DeclareLaunchArgument(
+        'video_device',
+        default_value='/dev/video0',
+        description='Device camera'
+    )
+    
+    camera_node = Node(
+        package='v4l2_camera',
+        executable='v4l2_camera_node',
+        name='camera_node',
+        output='screen',
+        namespace='camera',
+        parameters=[{
+            'video_device': LaunchConfiguration('video_device'),
+            'image_size': [640, 480],
+            'time_per_frame': [1, 6],
+            'camera_frame_id': 'camera_link_optical'
+        }]
+    )
+    
+    # Autonomous Drive Node (Camera: lane detection, LiDAR: obstacle avoidance)
+    autonomous_drive_node = Node(
+        package=package_name,
+        executable='obstacle_avoidance.py',
+        name='autonomous_drive',
+        output='screen',
+        parameters=[{
+            'use_sim_time': False,
+            'min_distance': 0.5,
+            'safe_distance': 0.8,
+            'max_linear_speed': 0.3,
+            'max_angular_speed': 1.0,
+            'front_angle_range': 60,
+            'use_camera': True,
+            'camera_topic': '/camera/image_raw'
+        }]
+    )
+    
+    return LaunchDescription([
+        serial_port_arg,
+        scan_mode_arg,
+        video_device_arg,
+        rsp,
+        twist_mux,
+        delayed_controller_manager,
+        delayed_diff_drive_spawner,
+        delayed_joint_broad_spawner,
+        lidar_node,
+        camera_node,
+        autonomous_drive_node
+    ])
+

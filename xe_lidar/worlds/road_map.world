@@ -1,0 +1,380 @@
+<?xml version='1.7'?>
+<sdf version='1.7'>
+  <world name='road_map'>
+    <!-- Lighting -->
+    <light name='sun' type='directional'>
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 -0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground Plane (nền đường) -->
+    <model name='ground_plane'>
+      <static>1</static>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 30</size>
+            </plane>
+          </geometry>
+          <surface>
+            <contact>
+              <collide_bitmask>65535</collide_bitmask>
+              <ode/>
+            </contact>
+            <friction>
+              <ode>
+                <mu>100</mu>
+                <mu2>50</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name='visual'>
+          <cast_shadows>0</cast_shadows>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 30</size>
+            </plane>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Đường chính (màu đen) -->
+    <model name='road'>
+      <static>1</static>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry>
+            <box>
+              <size>100 4 0.01</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <box>
+              <size>100 4 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Black</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+      <pose>0 0 0.005 0 0 0</pose>
+    </model>
+
+    <!-- Vạch kẻ đường giữa (màu vàng) -->
+    <model name='center_line_1'>
+      <static>1</static>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <box>
+              <size>2 0.1 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Yellow</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+      <pose>0 0 0.01 0 0 0</pose>
+    </model>
+
+    <model name='center_line_2'>
+      <static>1</static>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <box>
+              <size>2 0.1 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Yellow</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+      <pose>4 0 0.01 0 0 0</pose>
+    </model>
+
+    <model name='center_line_3'>
+      <static>1</static>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <box>
+              <size>2 0.1 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Yellow</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+      <pose>8 0 0.01 0 0 0</pose>
+    </model>
+
+    <model name='center_line_4'>
+      <static>1</static>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <box>
+              <size>2 0.1 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Yellow</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+      <pose>12 0 0.01 0 0 0</pose>
+    </model>
+
+    <!-- Physics -->
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type='adiabatic'/>
+    <physics type='ode'>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>1</shadows>
+    </scene>
+
+    <!-- VẬT CẢN BÊN TRÁI ĐƯỜNG (lề trái) -->
+    
+    <!-- Vật cản gần -->
+    <model name='obstacle_left_1'>
+      <pose>2.0 3.0 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_2'>
+      <pose>5.0 3.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_3'>
+      <pose>8.0 2.8 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_4'>
+      <pose>11.0 3.2 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_5'>
+      <pose>14.0 3.8 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_6'>
+      <pose>17.0 2.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_7'>
+      <pose>20.0 3.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <!-- Vật cản xa bên trái -->
+    <model name='obstacle_left_far_1'>
+      <pose>3.0 5.0 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_far_2'>
+      <pose>7.0 5.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_far_3'>
+      <pose>12.0 4.8 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_left_far_4'>
+      <pose>18.0 5.2 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <!-- VẬT CẢN BÊN PHẢI ĐƯỜNG (lề phải) -->
+    
+    <!-- Vật cản gần -->
+    <model name='obstacle_right_1'>
+      <pose>2.5 -3.0 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_2'>
+      <pose>5.5 -3.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_3'>
+      <pose>8.5 -2.8 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_4'>
+      <pose>11.5 -3.2 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_5'>
+      <pose>14.5 -3.8 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_6'>
+      <pose>17.5 -2.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_7'>
+      <pose>20.5 -3.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <!-- Vật cản xa bên phải -->
+    <model name='obstacle_right_far_1'>
+      <pose>3.5 -5.0 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_far_2'>
+      <pose>7.5 -5.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_far_3'>
+      <pose>12.5 -4.8 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_right_far_4'>
+      <pose>18.5 -5.2 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <!-- VẬT CẢN TRÊN ĐƯỜNG (để test tránh vật cản) -->
+    
+    <model name='obstacle_road_1'>
+      <pose>6.0 0.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_road_2'>
+      <pose>10.0 -0.5 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_road_3'>
+      <pose>15.0 0.3 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_cone</uri>
+      </include>
+    </model>
+
+    <model name='obstacle_road_4'>
+      <pose>19.0 -0.3 0.0 0 0 0</pose>
+      <include>
+        <uri>model://construction_barrel</uri>
+      </include>
+    </model>
+
+  </world>
+</sdf>
+
+

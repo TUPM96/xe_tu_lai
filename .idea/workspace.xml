@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="BackendCodeEditorMiscSettings">
+    <option name="/Default/Housekeeping/FeatureSuggestion/FeatureSuggestionManager/DisabledSuggesters/=SwitchToGoToActionSuggester/@EntryIndexedValue" value="true" type="bool" />
+    <option name="/Default/Housekeeping/GlobalSettingsUpgraded/IsUpgraded/@EntryValue" value="true" type="bool" />
+    <option name="/Default/RiderDebugger/RiderRestoreDecompile/RestoreDecompileSetting/@EntryValue" value="false" type="bool" />
+  </component>
+  <component name="CMakeProjectFlavorService">
+    <option name="flavorId" value="CMakePlainProjectFlavor" />
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ec4f1c6e-154d-4af7-b6da-7aca935664fd" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://commands.h" root0="SKIP_HIGHLIGHTING" />
+    <setting file="mock://diff_controller.h" root0="SKIP_HIGHLIGHTING" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6
+}</component>
+  <component name="ProjectId" id="30lanr82XAE4pxd2rg0rCBxJgCD" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.RadMigrateCodeStyle&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Mai Hieu/Desktop/DOAN/xe_lidar_1&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ec4f1c6e-154d-4af7-b6da-7aca935664fd" name="Changes" comment="" />
+      <created>1754204782522</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1754204782522</updated>
+      <workItem from="1754204783743" duration="6044000" />
+      <workItem from="1754279324705" duration="7193000" />
+      <workItem from="1754336745792" duration="34000" />
+      <workItem from="1754666267056" duration="11544000" />
+      <workItem from="1754698625031" duration="4806000" />
+      <workItem from="1754705912979" duration="1766000" />
+      <workItem from="1754714609715" duration="11321000" />
+      <workItem from="1754743714241" duration="50000" />
+      <workItem from="1754746968401" duration="13000" />
+      <workItem from="1754844005547" duration="17749000" />
+      <workItem from="1754882881587" duration="490000" />
+      <workItem from="1755069534764" duration="2429000" />
+      <workItem from="1755075012181" duration="7246000" />
+      <workItem from="1755083012052" duration="735000" />
+      <workItem from="1755083772463" duration="1032000" />
+      <workItem from="1755093226791" duration="225000" />
+      <workItem from="1755093477322" duration="6913000" />
+      <workItem from="1755104146336" duration="59000" />
+      <workItem from="1755147199245" duration="7962000" />
+      <workItem from="1755768249544" duration="868000" />
+      <workItem from="1763808330980" duration="748000" />
+      <workItem from="1763809279734" duration="938000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>
