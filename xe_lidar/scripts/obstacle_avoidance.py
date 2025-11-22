@@ -20,7 +20,7 @@ class AutonomousDrive(Node):
         super().__init__('autonomous_drive')
         
         # Parameters
-        self.declare_parameter('use_sim_time', False)
+        # Note: use_sim_time is set by launch file, don't declare it here
         self.declare_parameter('min_distance', 0.5)  # Khoảng cách tối thiểu để dừng (m)
         self.declare_parameter('safe_distance', 0.8)  # Khoảng cách an toàn để tránh (m)
         self.declare_parameter('max_linear_speed', 0.3)  # Tốc độ tối đa (m/s)

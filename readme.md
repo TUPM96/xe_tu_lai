@@ -142,7 +142,8 @@ sudo apt install -y \
     gazebo
 
 # Cài đặt thêm Python packages nếu cần
-pip3 install numpy opencv-python
+# QUAN TRỌNG: Cài NumPy 1.x để tương thích với cv_bridge (NumPy 2.x chưa được hỗ trợ)
+pip3 install "numpy<2.0" opencv-python
 
 # Cài đặt dependencies cho các package trong workspace
 cd ~/ros2_ws
@@ -240,7 +241,13 @@ sudo apt install -y \
 
 rosdep install --from-paths src --ignore-src -r -y
 
-# 3. Build
+# QUAN TRỌNG: Cài NumPy 1.x để tương thích với cv_bridge (NumPy 2.x chưa được hỗ trợ)
+pip3 install "numpy<2.0"
+
+# 3. Đảm bảo file Python có quyền thực thi
+chmod +x src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
+
+# 4. Build
 colcon build --symlink-install
 source install/setup.bash
 ```
