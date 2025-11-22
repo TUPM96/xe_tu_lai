@@ -34,7 +34,7 @@ def generate_launch_description():
         ]),
         launch_arguments={
             'use_sim_time': 'true',
-            'use_ros2_control': 'true'  # Dùng ros2_control cho Ackermann
+            'use_ros2_control': 'false'  # Dùng Gazebo plugin cho simulation (không cần gazebo_ros2_control)
         }.items()
     )
     
@@ -71,51 +71,8 @@ def generate_launch_description():
     
     delayed_spawn_entity = TimerAction(period=5.0, actions=[spawn_entity])
     
-    # Controller manager
-    robot_description = Command(['ros2 param get --hide-type /robot_state_publisher robot_description'])
-    controller_params_file = os.path.join(
-        get_package_share_directory(package_name),
-        'config',
-        'my_controllers_ackermann.yaml'
-    )
-    controller_manager = Node(
-        package='controller_manager',
-        executable='ros2_control_node',
-        parameters=[{'robot_description': robot_description}, controller_params_file],
-        output='screen'
-    )
-    
-    # Delay controller manager
-    delayed_controller_manager = TimerAction(period=3.0, actions=[controller_manager])
-    
-    # Spawn controllers
-    ackermann_controller_spawner = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['ackermann_steering_controller'],
-        output='screen'
-    )
-    
-    delayed_ackermann_spawner = RegisterEventHandler(
-        event_handler=OnProcessStart(
-            target_action=controller_manager,
-            on_start=[ackermann_controller_spawner]
-        )
-    )
-    
-    joint_broad_spawner = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['joint_broad'],
-        output='screen'
-    )
-    
-    delayed_joint_broad_spawner = RegisterEventHandler(
-        event_handler=OnProcessStart(
-            target_action=controller_manager,
-            on_start=[joint_broad_spawner]
-        )
-    )
+    # Không cần controller manager khi dùng Gazebo plugin
+    # Gazebo plugin (libgazebo_ros_ackermann_drive.so) sẽ tự động xử lý cmd_vel
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
     # Delay để đợi robot được spawn và LiDAR sẵn sàng
@@ -144,9 +101,6 @@ def generate_launch_description():
         rsp,
         gazebo,
         delayed_spawn_entity,
-        delayed_controller_manager,
-        delayed_ackermann_spawner,
-        delayed_joint_broad_spawner,
         delayed_autonomous_drive,
     ])
 
