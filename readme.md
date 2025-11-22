@@ -121,11 +121,8 @@ cd ~/ros2_ws/src
 # Clone repository
 git clone https://github.com/TUPM96/xe_tu_lai.git
 
-# Hoặc nếu đã có SSH key setup:
-# git clone git@github.com:TUPM96/xe_tu_lai.git
-
-# Di chuyển vào thư mục
-cd xe_tu_lai
+# Kiểm tra file Python script có trong repository
+ls -la xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
 ```
 
 ### Bước 3: Cài đặt dependencies
@@ -158,14 +155,15 @@ rosdep install --from-paths src --ignore-src -r -y
 # Di chuyển về thư mục workspace
 cd ~/ros2_ws
 
+# QUAN TRỌNG: Đảm bảo file Python có quyền thực thi
+chmod +x src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
+
 # Build workspace
+# File sẽ tự động được copy vào: install/xe_lidar/lib/xe_lidar/obstacle_avoidance.py
 colcon build --symlink-install
 
-# Nếu có lỗi, build từng package:
-# colcon build --packages-select xe_lidar
-# colcon build --packages-select diffdrive_arduino
-# colcon build --packages-select rplidar_ros
-# colcon build --packages-select serial
+# Kiểm tra file đã được cài đặt đúng vị trí
+ls -la install/xe_lidar/lib/xe_lidar/obstacle_avoidance.py
 
 # Source workspace
 source install/setup.bash
@@ -183,8 +181,10 @@ printenv | grep ROS
 # Kiểm tra package đã được build
 ros2 pkg list | grep xe_lidar
 
-# Kiểm tra launch files
-ros2 launch xe_lidar --help
+# Kiểm tra file Python script đã được cài đặt và có thể chạy
+ros2 run xe_lidar obstacle_avoidance.py --help
+
+# Nếu chạy được lệnh trên (hiển thị help) là OK! ✅
 ```
 
 ### Bước 6: Cài đặt ackermann_steering_controller (Tùy chọn - nếu dùng Ackermann)
@@ -540,6 +540,15 @@ sudo chown -R $USER:$USER ~/ros2_ws
 sudo rm /etc/ros/rosdep/sources.list.d/20-default.list
 sudo rosdep init
 ```
+
+**Lỗi: executable 'obstacle_avoidance.py' not found**
+
+Đảm bảo đã làm đúng các bước theo thứ tự:
+1. File có quyền thực thi: `chmod +x src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py`
+2. Build workspace: `cd ~/ros2_ws && colcon build --symlink-install`
+3. Kiểm tra file đã được cài: `ls -la install/xe_lidar/lib/xe_lidar/obstacle_avoidance.py`
+4. Source workspace: `source install/setup.bash`
+5. Test: `ros2 run xe_lidar obstacle_avoidance.py --help`
 
 ### Lỗi khi chạy simulation
 
