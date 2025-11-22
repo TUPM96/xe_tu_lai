@@ -76,21 +76,25 @@ def generate_launch_description():
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
     # Delay để đợi robot được spawn và LiDAR sẵn sàng
-    autonomous_drive_node = Node(
-        package=package_name,
-        executable='obstacle_avoidance.py',
-        name='autonomous_drive',
-        output='screen',
-        parameters=[{
-            'use_sim_time': True,
-            'min_distance': 0.5,
-            'safe_distance': 0.8,
-            'max_linear_speed': 0.3,
-            'max_angular_speed': 1.0,
-            'front_angle_range': 60,
-            'use_camera': True,
-            'camera_topic': '/camera/image_raw'
-        }]
+    # Dùng ExecuteProcess với đường dẫn đầy đủ thay vì Node để tránh lỗi libexec
+    obstacle_avoidance_script = os.path.join(
+        get_package_share_directory(package_name),
+        '..', 'lib', package_name, 'obstacle_avoidance.py'
+    )
+    
+    autonomous_drive_node = ExecuteProcess(
+        cmd=['python3', obstacle_avoidance_script,
+             '--ros-args',
+             '-r', '__node:=autonomous_drive',
+             '-p', 'use_sim_time:=true',
+             '-p', 'min_distance:=0.5',
+             '-p', 'safe_distance:=0.8',
+             '-p', 'max_linear_speed:=0.3',
+             '-p', 'max_angular_speed:=1.0',
+             '-p', 'front_angle_range:=60',
+             '-p', 'use_camera:=true',
+             '-p', 'camera_topic:=/camera/image_raw'],
+        output='screen'
     )
     
     # Delay autonomous drive node để đợi robot spawn và LiDAR sẵn sàng

@@ -38,13 +38,14 @@ install(
 )
 
 # Install Python scripts
-# ROS2 sẽ tìm trong libexec trước, sau đó mới tìm trong lib
+# ROS2 launch system tìm trong libexec trước, sau đó mới tìm trong lib
+# Cài vào cả 2 để đảm bảo ROS2 tìm thấy
 install(PROGRAMS
   scripts/obstacle_avoidance.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Cũng cài vào libexec để đảm bảo ROS2 tìm thấy
+# Tạo thư mục libexec và cài file vào đó (ROS2 ưu tiên tìm ở đây)
 install(PROGRAMS
   scripts/obstacle_avoidance.py
   DESTINATION libexec/${PROJECT_NAME}
