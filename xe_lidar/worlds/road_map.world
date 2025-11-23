@@ -58,21 +58,21 @@
       </link>
     </model>
 
-    <!-- Đường chính (màu đen) -->
+    <!-- Đường chính (màu đen) - rộng bằng 2 lần xe (0.28m * 2 = 0.56m) -->
     <model name='road'>
       <static>1</static>
       <link name='link'>
         <collision name='collision'>
           <geometry>
             <box>
-              <size>100 4 0.01</size>
+              <size>100 0.56 0.01</size>
             </box>
           </geometry>
         </collision>
         <visual name='visual'>
           <geometry>
             <box>
-              <size>100 4 0.01</size>
+              <size>100 0.56 0.01</size>
             </box>
           </geometry>
           <material>
@@ -86,14 +86,15 @@
       <pose>0 0 0.005 0 0 0</pose>
     </model>
 
-    <!-- Vạch kẻ đường bên TRÁI (màu trắng) - dọc theo đường -->
-    <model name='left_lane_marker_1'>
+    <!-- Vạch kẻ đường bên TRÁI (màu trắng) - liền mạch dọc theo đường -->
+    <!-- Đường rộng 0.56m, line ở y = 0.28 (bên trái đường) -->
+    <model name='left_lane_marker'>
       <static>1</static>
       <link name='link'>
         <visual name='visual'>
           <geometry>
             <box>
-              <size>2 0.15 0.02</size>
+              <size>100 0.15 0.02</size>
             </box>
           </geometry>
           <material>
@@ -104,16 +105,18 @@
           </material>
         </visual>
       </link>
-      <pose>0 2.0 0.01 0 0 0</pose>
+      <pose>0 0.28 0.01 0 0 0</pose>
     </model>
 
-    <model name='left_lane_marker_2'>
+    <!-- Vạch kẻ đường bên PHẢI (màu trắng) - liền mạch dọc theo đường -->
+    <!-- Đường rộng 0.56m, line ở y = -0.28 (bên phải đường) -->
+    <model name='right_lane_marker'>
       <static>1</static>
       <link name='link'>
         <visual name='visual'>
           <geometry>
             <box>
-              <size>2 0.15 0.02</size>
+              <size>100 0.15 0.02</size>
             </box>
           </geometry>
           <material>
@@ -124,450 +127,7 @@
           </material>
         </visual>
       </link>
-      <pose>4 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_3'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>8 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_4'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>12 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_5'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>16 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_6'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>20 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <!-- Vạch kẻ đường bên PHẢI (màu trắng) - dọc theo đường -->
-    <model name='right_lane_marker_1'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>0 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_2'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>4 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_3'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>8 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_4'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>12 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_5'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>16 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_6'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>20 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <!-- Thêm nhiều vạch trắng bên trái để tạo đường liên tục -->
-    <model name='left_lane_marker_7'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>24 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_8'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>28 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_9'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>32 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_10'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>36 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_11'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>40 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='left_lane_marker_12'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>44 2.0 0.01 0 0 0</pose>
-    </model>
-
-    <!-- Thêm nhiều vạch trắng bên phải để tạo đường liên tục -->
-    <model name='right_lane_marker_7'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>24 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_8'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>28 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_9'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>32 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_10'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>36 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_11'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>40 -2.0 0.01 0 0 0</pose>
-    </model>
-
-    <model name='right_lane_marker_12'>
-      <static>1</static>
-      <link name='link'>
-        <visual name='visual'>
-          <geometry>
-            <box>
-              <size>2 0.15 0.02</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>file://media/materials/scripts/gazebo.material</uri>
-              <name>Gazebo/White</name>
-            </script>
-          </material>
-        </visual>
-      </link>
-      <pose>44 -2.0 0.01 0 0 0</pose>
+      <pose>0 -0.28 0.01 0 0 0</pose>
     </model>
 
     <!-- Physics -->

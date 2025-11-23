@@ -70,10 +70,10 @@ def generate_launch_description():
     )
     
     # Spawn robot vào Gazebo (delay để đợi Gazebo khởi động)
-    # Spawn ở đầu đường, giữa làn đường bên phải
+    # Spawn ở đầu đường, giữa đường (đường rộng 0.56m, giữa ở y=0)
     # z = wheel_radius (0.034) để bánh xe chạm đất
     print("🤖 Node 3: Spawn Robot Entity (delay 5s)")
-    print("   Position: x=-5.0, y=-1.0, z=0.034 (bánh xe chạm đất)")
+    print("   Position: x=-5.0, y=0.0, z=0.034 (giữa đường, bánh xe chạm đất)")
     print("   ⚠️  LiDAR plugin sẽ tự động load khi robot spawn")
     spawn_entity = Node(
         package='gazebo_ros',
@@ -82,7 +82,7 @@ def generate_launch_description():
             '-topic', 'robot_description',
             '-entity', 'robot',
             '-x', '-5.0',  # Đầu đường
-            '-y', '-1.0',  # Làn đường bên phải
+            '-y', '0.0',   # Giữa đường (đường rộng 0.56m)
             '-z', '0.034',  # Bánh xe chạm đất (wheel_radius)
             '-Y', '0.0'    # Hướng về phía trước
         ],
