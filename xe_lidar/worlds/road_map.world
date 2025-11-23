@@ -58,21 +58,21 @@
       </link>
     </model>
 
-    <!-- Đường chính (màu đen) - rộng bằng 2 lần xe (0.28m * 2 = 0.56m) -->
+    <!-- Đường chính (màu đen) - rộng gấp đôi (0.56m * 2 = 1.12m) -->
     <model name='road'>
       <static>1</static>
       <link name='link'>
         <collision name='collision'>
           <geometry>
             <box>
-              <size>100 0.56 0.01</size>
+              <size>100 1.12 0.01</size>
             </box>
           </geometry>
         </collision>
         <visual name='visual'>
           <geometry>
             <box>
-              <size>100 0.56 0.01</size>
+              <size>100 1.12 0.01</size>
             </box>
           </geometry>
           <material>
@@ -87,7 +87,7 @@
     </model>
 
     <!-- Vạch kẻ đường bên TRÁI (màu trắng) - liền mạch dọc theo đường -->
-    <!-- Đường rộng 0.56m, line ở y = 0.28 (bên trái đường) -->
+    <!-- Đường rộng 1.12m, line ở y = 0.56 (bên trái đường) -->
     <model name='left_lane_marker'>
       <static>1</static>
       <link name='link'>
@@ -105,11 +105,11 @@
           </material>
         </visual>
       </link>
-      <pose>0 0.28 0.01 0 0 0</pose>
+      <pose>0 0.56 0.01 0 0 0</pose>
     </model>
 
     <!-- Vạch kẻ đường bên PHẢI (màu trắng) - liền mạch dọc theo đường -->
-    <!-- Đường rộng 0.56m, line ở y = -0.28 (bên phải đường) -->
+    <!-- Đường rộng 1.12m, line ở y = -0.56 (bên phải đường) -->
     <model name='right_lane_marker'>
       <static>1</static>
       <link name='link'>
@@ -127,7 +127,7 @@
           </material>
         </visual>
       </link>
-      <pose>0 -0.28 0.01 0 0 0</pose>
+      <pose>0 -0.56 0.01 0 0 0</pose>
     </model>
 
     <!-- Physics -->

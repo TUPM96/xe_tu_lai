@@ -257,12 +257,15 @@ class AutonomousDrive(Node):
             self.lane_center_offset = 0.0
     
     def control_loop(self):
-        """Vòng lặp điều khiển chính - kết hợp lane following và obstacle avoidance"""
+        """
+        Vòng lặp điều khiển chính:
+        - ƯU TIÊN CHÍNH: Camera để đi đúng tim đường (lane following)
+        - ƯU TIÊN PHỤ: LiDAR chỉ để tránh vật cản khi cần thiết
+        """
         cmd = Twist()
         
-        # Chạy ngay khi có LiDAR, không chờ
+        # Xử lý trường hợp chưa có LiDAR (chạy chậm để an toàn)
         if self.latest_scan is None:
-            # Chưa có dữ liệu LiDAR, chạy chậm để an toàn
             if self.lidar_warning_count % 20 == 0:
                 self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, chạy chậm để an toàn...')
             self.lidar_warning_count += 1
@@ -278,40 +281,40 @@ class AutonomousDrive(Node):
             self.lidar_warning_count = 0
             self.get_logger().info('Đã nhận được dữ liệu LiDAR, chuyển sang chế độ tự động!')
         
-        # ƯU TIÊN 1: Tránh vật cản (LiDAR)
+        # ƯU TIÊN PHỤ: Kiểm tra vật cản bằng LiDAR (chỉ khi có vật cản mới can thiệp)
         if self.obstacle_detected:
-            # Có vật cản, thực hiện tránh
+            # Có vật cản, thực hiện tránh (tạm thời bỏ qua camera)
             if self.obstacle_direction == 0:
                 # Vật cản ở giữa hoặc cả hai bên, lùi lại và quay
                 cmd.linear.x = -self.max_linear_speed * 0.5
                 cmd.angular.z = self.max_angular_speed * 0.8
-                self.get_logger().info('Vật cản phía trước - Lùi lại và quay phải')
+                self.get_logger().info('⚠️ Vật cản phía trước - Lùi lại và quay phải')
             elif self.obstacle_direction < 0:
                 # Vật cản bên trái, quay phải để tránh
                 cmd.linear.x = self.max_linear_speed * 0.6
                 cmd.angular.z = -self.max_angular_speed * 0.7
-                self.get_logger().info('Vật cản bên trái - Quay phải để tránh')
+                self.get_logger().info('⚠️ Vật cản bên trái - Quay phải để tránh')
             else:
                 # Vật cản bên phải, quay trái để tránh
                 cmd.linear.x = self.max_linear_speed * 0.6
                 cmd.angular.z = self.max_angular_speed * 0.7
-                self.get_logger().info('Vật cản bên phải - Quay trái để tránh')
+                self.get_logger().info('⚠️ Vật cản bên phải - Quay trái để tránh')
         else:
-            # KHÔNG có vật cản - ƯU TIÊN 2: Đi theo vạch kẻ đường (Camera)
+            # KHÔNG có vật cản - ƯU TIÊN CHÍNH: Camera để đi đúng tim đường
             if self.use_camera and self.lane_detected:
-                # Điều chỉnh để đi giữa đường dựa trên camera
+                # Điều chỉnh để đi giữa đường dựa trên camera (đi đúng tim đường)
                 cmd.linear.x = self.max_linear_speed
                 # Điều chỉnh góc quay dựa trên offset từ giữa đường
                 # offset > 0: lệch phải -> quay trái (angular > 0)
                 # offset < 0: lệch trái -> quay phải (angular < 0)
                 cmd.angular.z = -self.lane_center_offset * self.max_angular_speed * 0.8
-                self.get_logger().debug(f'Đi theo vạch kẻ đường, offset: {self.lane_center_offset:.2f}')
+                self.get_logger().debug(f'📷 Đi theo vạch kẻ đường (Camera), offset: {self.lane_center_offset:.2f}')
             else:
                 # Không phát hiện được vạch kẻ đường, đi thẳng với tốc độ đầy đủ
                 cmd.linear.x = self.max_linear_speed
                 cmd.angular.z = 0.0
                 if self.use_camera:
-                    self.get_logger().debug('Không phát hiện vạch kẻ đường, đi thẳng')
+                    self.get_logger().debug('📷 Không phát hiện vạch kẻ đường, đi thẳng')
         
         self.cmd_vel_pub.publish(cmd)
 
