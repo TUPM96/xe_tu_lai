@@ -43,6 +43,7 @@ class AutonomousDrive(Node):
             self.scan_callback,
             10
         )
+        self.get_logger().info('Đã subscribe topic /scan cho LiDAR')
         
         if self.use_camera:
             camera_topic = self.get_parameter('camera_topic').value
@@ -79,6 +80,8 @@ class AutonomousDrive(Node):
     
     def scan_callback(self, msg):
         """Callback xử lý dữ liệu LiDAR để phát hiện vật cản"""
+        if self.latest_scan is None:
+            self.get_logger().info('Đã nhận được dữ liệu LiDAR lần đầu!')
         self.latest_scan = msg
         self.process_lidar_data(msg)
     
@@ -237,19 +240,22 @@ class AutonomousDrive(Node):
         cmd = Twist()
         
         if self.latest_scan is None:
-            # Chưa có dữ liệu LiDAR, dừng lại
-            cmd.linear.x = 0.0
-            cmd.angular.z = 0.0
-            self.cmd_vel_pub.publish(cmd)
+            # Chưa có dữ liệu LiDAR, chạy chậm để an toàn
             # Chỉ warning mỗi 2 giây (20 lần * 0.1s) để tránh spam
             if self.lidar_warning_count % 20 == 0:
-                self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, đang chờ...')
+                self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, chạy chậm để an toàn...')
             self.lidar_warning_count += 1
+            
+            # Chạy chậm khi chưa có LiDAR (tốc độ 30% để an toàn)
+            cmd.linear.x = self.max_linear_speed * 0.3
+            cmd.angular.z = 0.0
+            self.cmd_vel_pub.publish(cmd)
             return
         
         # Reset counter khi đã có dữ liệu
         if self.lidar_warning_count > 0:
             self.lidar_warning_count = 0
+            self.get_logger().info('Đã nhận được dữ liệu LiDAR, chuyển sang chế độ tự động!')
         
         # ƯU TIÊN 1: Tránh vật cản (LiDAR)
         if self.obstacle_detected:

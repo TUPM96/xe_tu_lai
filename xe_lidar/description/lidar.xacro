@@ -37,6 +37,7 @@
         <material>Gazebo/Black</material>
 
         <sensor name="laser" type="ray">
+            <always_on>true</always_on>
             <pose> 0 0 0 0 0 0 </pose>
             <visualize>false</visualize>
             <update_rate>20</update_rate>
@@ -55,10 +56,11 @@
             </ray>
             <plugin name="laser_controller" filename="libgazebo_ros_ray_sensor.so">
                 <ros>
-                    <argument>~/out:=scan</argument>
+                    <namespace>/</namespace>
                 </ros>
                 <output_type>sensor_msgs/LaserScan</output_type>
                 <frame_name>laser_frame</frame_name>
+                <topic_name>scan</topic_name>
             </plugin>
         </sensor>
     </gazebo>
