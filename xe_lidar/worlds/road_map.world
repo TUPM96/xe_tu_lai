@@ -337,6 +337,17 @@
       </include>
     </model>
 
+    <!-- GUI Camera View: Nhìn từ đuôi xe, từ trên cao, về hướng đầu xe -->
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <!-- Pose: x=-5.5 (sau đuôi xe), y=0 (giữa đường), z=4 (từ trên cao) -->
+        <!-- rpy: roll=0, pitch=-0.6 (nhìn xuống ~35 độ), yaw=0 (nhìn về hướng +x, đầu xe) -->
+        <pose>-5.5 0.0 4.0 0 -0.6 0</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+
   </world>
 </sdf>
 
