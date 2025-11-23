@@ -68,6 +68,7 @@ class AutonomousDrive(Node):
         self.obstacle_direction = 0.0  # -1: trái, 0: giữa, 1: phải
         self.lane_center_offset = 0.0  # Offset từ giữa đường (-1 đến 1)
         self.lane_detected = False
+        self.lidar_warning_count = 0  # Đếm số lần warning để tránh spam
         
         # Timer để xuất lệnh điều khiển
         self.timer = self.create_timer(0.1, self.control_loop)  # 10 Hz
@@ -240,8 +241,15 @@ class AutonomousDrive(Node):
             cmd.linear.x = 0.0
             cmd.angular.z = 0.0
             self.cmd_vel_pub.publish(cmd)
-            self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, đang chờ...')
+            # Chỉ warning mỗi 2 giây (20 lần * 0.1s) để tránh spam
+            if self.lidar_warning_count % 20 == 0:
+                self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, đang chờ...')
+            self.lidar_warning_count += 1
             return
+        
+        # Reset counter khi đã có dữ liệu
+        if self.lidar_warning_count > 0:
+            self.lidar_warning_count = 0
         
         # ƯU TIÊN 1: Tránh vật cản (LiDAR)
         if self.obstacle_detected:
@@ -283,23 +291,37 @@ class AutonomousDrive(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = AutonomousDrive()
+    node = None
     
     try:
+        node = AutonomousDrive()
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        if node:
+            node.get_logger().error(f'Lỗi trong node: {str(e)}')
     finally:
         # Dừng robot trước khi thoát (chỉ nếu context còn valid)
+        if node:
+            try:
+                if rclpy.ok():
+                    cmd = Twist()
+                    node.cmd_vel_pub.publish(cmd)
+            except Exception:
+                pass  # Ignore errors during shutdown
+            
+            try:
+                node.destroy_node()
+            except Exception:
+                pass  # Ignore errors during node destruction
+        
+        # Chỉ shutdown nếu context còn valid
         try:
             if rclpy.ok():
-                cmd = Twist()
-                node.cmd_vel_pub.publish(cmd)
+                rclpy.shutdown()
         except Exception:
-            pass  # Ignore errors during shutdown
-        finally:
-            node.destroy_node()
-            rclpy.shutdown()
+            pass  # Ignore errors if already shutdown
 
 
 if __name__ == '__main__':
