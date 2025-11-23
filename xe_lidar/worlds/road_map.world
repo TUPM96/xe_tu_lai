@@ -338,13 +338,18 @@
     </model>
 
     <!-- GUI Camera View: Nhìn từ đuôi xe, từ trên cao, về hướng đầu xe -->
+    <!-- Xe spawn ở x=-5.0, y=0.0, z=0.034 -->
     <gui fullscreen='0'>
       <camera name='user_camera'>
-        <!-- Pose: x=-5.5 (sau đuôi xe), y=0 (giữa đường), z=4 (từ trên cao) -->
-        <!-- rpy: roll=0, pitch=-0.6 (nhìn xuống ~35 độ), yaw=0 (nhìn về hướng +x, đầu xe) -->
-        <pose>-5.5 0.0 4.0 0 -0.6 0</pose>
+        <!-- Pose: x=-6.5 (sau đuôi xe), y=0 (giữa đường), z=2.5 (từ trên cao) -->
+        <!-- rpy: roll=0, pitch=-0.4 (nhìn xuống ~23 độ), yaw=0 (nhìn về hướng +x, đầu xe) -->
+        <pose>-6.5 0.0 2.5 0 -0.4 0</pose>
         <view_controller>orbit</view_controller>
         <projection_type>perspective</projection_type>
+        <!-- Track target ở vị trí xe -->
+        <track_visual>
+          <name>robot::chassis</name>
+        </track_visual>
       </camera>
     </gui>
 
