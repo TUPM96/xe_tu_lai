@@ -36,23 +36,24 @@
     <gazebo reference="laser_frame">
         <material>Gazebo/Black</material>
 
+        <!-- RPLIDAR A1M8 Configuration -->
         <sensor name="laser" type="ray">
             <always_on>true</always_on>
             <pose> 0 0 0 0 0 0 </pose>
             <visualize>false</visualize>
-            <update_rate>20</update_rate>
+            <update_rate>5.5</update_rate>  <!-- A1M8 scan rate: 5.5 Hz -->
             <ray>
                 <scan>
                     <horizontal>
-                        <samples>360</samples>
-                        <resolution>1.0</resolution>
-                        <min_angle>-3.14159</min_angle>
-                        <max_angle>3.14159</max_angle>
+                        <samples>360</samples>  <!-- 360 samples for 360 degrees -->
+                        <resolution>1.0</resolution>  <!-- ~1 degree per sample -->
+                        <min_angle>-3.14159</min_angle>  <!-- -180 degrees -->
+                        <max_angle>3.14159</max_angle>    <!-- +180 degrees -->
                     </horizontal>
                 </scan>
                 <range>
-                    <min>0.3</min>
-                    <max>12.0</max>
+                    <min>0.15</min>  <!-- A1M8 minimum range: 0.15m -->
+                    <max>12.0</max>  <!-- A1M8 maximum range: 12m -->
                     <resolution>0.01</resolution>
                 </range>
                 <noise>
@@ -64,11 +65,11 @@
             <plugin name="laser_controller" filename="libgazebo_ros_ray_sensor.so">
                 <ros>
                     <namespace>/</namespace>
+                    <remapping>~/out:=scan</remapping>
                 </ros>
                 <output_type>sensor_msgs/LaserScan</output_type>
                 <frame_name>laser_frame</frame_name>
                 <topic_name>scan</topic_name>
-                <min_intensity>0.0</min_intensity>
             </plugin>
         </sensor>
     </gazebo>
