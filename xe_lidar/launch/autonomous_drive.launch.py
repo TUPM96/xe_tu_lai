@@ -18,14 +18,14 @@ def generate_launch_description():
     print(f"📦 Package: {package_name}")
     print("=" * 60)
     
-    # Robot state publisher (sử dụng launch file có sẵn)
-    print("📡 Node 1: Robot State Publisher (RSP)")
+    # Robot state publisher (sử dụng launch file có sẵn) - Ackermann 4 bánh
+    print("📡 Node 1: Robot State Publisher (RSP) - Ackermann 4 bánh")
     rsp = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(
                 get_package_share_directory(package_name),
                 'launch',
-                'rsp.launch.py'
+                'rsp_ackermann.launch.py'
             )
         ]),
         launch_arguments={
@@ -45,17 +45,17 @@ def generate_launch_description():
         package='twist_mux',
         executable='twist_mux',
         parameters=[twist_mux_params],
-        remappings=[('/cmd_vel_out', '/diff_cont/cmd_vel_unstamped')],
+        remappings=[('/cmd_vel_out', '/ackermann_steering_controller/cmd_vel_unstamped')],
         output='screen'
     )
-    
+
     # Controller manager
     print("🎮 Node 3: Controller Manager (delay 3s)")
     robot_description = Command(['ros2 param get --hide-type /robot_state_publisher robot_description'])
     controller_params_file = os.path.join(
         get_package_share_directory(package_name),
         'config',
-        'my_controllers.yaml'
+        'my_controllers_ackermann.yaml'
     )
     controller_manager = Node(
         package='controller_manager',
@@ -68,18 +68,18 @@ def generate_launch_description():
     delayed_controller_manager = TimerAction(period=3.0, actions=[controller_manager])
     
     # Spawn controllers
-    print("⚙️  Node 4: Diff Drive Controller Spawner (sau khi controller manager start)")
-    diff_drive_spawner = Node(
+    print("⚙️  Node 4: Ackermann Steering Controller Spawner (sau khi controller manager start)")
+    ackermann_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['diff_cont'],
+        arguments=['ackermann_steering_controller'],
         output='screen'
     )
 
-    delayed_diff_drive_spawner = RegisterEventHandler(
+    delayed_ackermann_controller_spawner = RegisterEventHandler(
         event_handler=OnProcessStart(
             target_action=controller_manager,
-            on_start=[diff_drive_spawner]
+            on_start=[ackermann_controller_spawner]
         )
     )
 
@@ -171,10 +171,10 @@ def generate_launch_description():
     
     print("=" * 60)
     print("📋 TÓM TẮT CÁC NODE:")
-    print("   1. Robot State Publisher (RSP) - ngay lập tức")
+    print("   1. Robot State Publisher (RSP) - Ackermann 4 bánh - ngay lập tức")
     print("   2. Twist Mux - ngay lập tức")
     print("   3. Controller Manager - sau 3 giây")
-    print("   4. Diff Drive Controller - sau khi controller manager start")
+    print("   4. Ackermann Steering Controller - sau khi controller manager start")
     print("   5. Joint State Broadcaster - sau khi controller manager start")
     print("   6. RPLIDAR Node - ngay lập tức")
     print("   7. Camera Node - ngay lập tức")
@@ -188,7 +188,7 @@ def generate_launch_description():
         rsp,
         twist_mux,
         delayed_controller_manager,
-        delayed_diff_drive_spawner,
+        delayed_ackermann_controller_spawner,
         delayed_joint_broad_spawner,
         lidar_node,
         camera_node,

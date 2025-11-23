@@ -121,7 +121,7 @@
 
     <gazebo>
         <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
-            <parameters>$(find xe_lidar)/config/my_controllers.yaml</parameters>
+            <parameters>$(find xe_lidar)/config/my_controllers_ackermann.yaml</parameters>
         </plugin>
     </gazebo>
 

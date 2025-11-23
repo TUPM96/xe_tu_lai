@@ -32,14 +32,14 @@ def generate_launch_description():
     
     world = LaunchConfiguration('world')
     
-    # Robot state publisher với sim time
-    print("📡 Node 1: Robot State Publisher (RSP)")
+    # Robot state publisher với sim time (Ackermann 4 bánh)
+    print("📡 Node 1: Robot State Publisher (RSP) - Ackermann 4 bánh")
     rsp = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(
                 get_package_share_directory(package_name),
                 'launch',
-                'rsp.launch.py'
+                'rsp_ackermann.launch.py'
             )
         ]),
         launch_arguments={
