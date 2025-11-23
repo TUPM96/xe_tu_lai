@@ -79,56 +79,62 @@ def generate_launch_description():
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
     # Delay để đợi robot được spawn và LiDAR sẵn sàng
-    # Tìm file script và đảm bảo nó có thể được tìm thấy bởi ROS2
-    pkg_libexec_dir = os.path.join(pkg_share_dir, 'libexec', package_name)
+    # Tìm file script - ưu tiên lib, sau đó source directory
     pkg_lib_file = os.path.join(pkg_lib_dir, 'obstacle_avoidance.py')
-    pkg_libexec_file = os.path.join(pkg_libexec_dir, 'obstacle_avoidance.py')
     
-    # Tạo thư mục libexec nếu chưa có
-    os.makedirs(pkg_libexec_dir, exist_ok=True)
-    
-    # Copy hoặc symlink file vào libexec nếu chưa có
-    if not os.path.exists(pkg_libexec_file):
-        if os.path.exists(pkg_lib_file):
-            try:
-                # Thử tạo symlink (Linux/Mac)
-                os.symlink(pkg_lib_file, pkg_libexec_file)
-            except (OSError, NotImplementedError):
-                # Nếu symlink không được hỗ trợ (Windows), copy file
-                import shutil
-                shutil.copy2(pkg_lib_file, pkg_libexec_file)
-                # Đảm bảo file có quyền thực thi
-                os.chmod(pkg_libexec_file, 0o755)
+    # Tìm file script trong các vị trí có thể
+    script_path = None
+    if os.path.exists(pkg_lib_file):
+        script_path = pkg_lib_file
+    else:
+        # Tìm trong source directory
+        pkg_share_abs = get_package_share_directory(package_name)
+        # Từ install/xe_lidar/share/xe_lidar -> src/xe_lidar/scripts
+        pkg_source_script = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(pkg_share_abs))),
+            'src', package_name, 'scripts', 'obstacle_avoidance.py'
+        )
+        if os.path.exists(pkg_source_script):
+            script_path = pkg_source_script
         else:
-            # Nếu không tìm thấy trong lib, thử tìm trong source
-            pkg_source_script = os.path.join(
-                get_package_share_directory(package_name),
-                '..', '..', '..', 'src', package_name, 'scripts', 'obstacle_avoidance.py'
-            )
-            if os.path.exists(pkg_source_script):
-                try:
-                    os.symlink(pkg_source_script, pkg_libexec_file)
-                except (OSError, NotImplementedError):
-                    import shutil
-                    shutil.copy2(pkg_source_script, pkg_libexec_file)
-                    os.chmod(pkg_libexec_file, 0o755)
+            # Fallback: tìm từ workspace root
+            workspace_root = os.path.dirname(os.path.dirname(pkg_share_abs))
+            fallback_path = os.path.join(workspace_root, 'src', package_name, 'scripts', 'obstacle_avoidance.py')
+            if os.path.exists(fallback_path):
+                script_path = fallback_path
     
-    # Dùng Node với executable (ROS2 sẽ tìm trong libexec)
-    autonomous_drive_node = Node(
-        package=package_name,
-        executable='obstacle_avoidance.py',
-        name='autonomous_drive',
+    # Nếu vẫn không tìm thấy, dùng đường dẫn tương đối từ share
+    if not script_path or not os.path.exists(script_path):
+        script_path = os.path.join(pkg_share, '..', '..', 'lib', package_name, 'obstacle_avoidance.py')
+        # Normalize đường dẫn
+        script_path = os.path.normpath(script_path)
+    
+    # Kiểm tra file có tồn tại không
+    if not os.path.exists(script_path):
+        # Thử tìm trong thư mục scripts của package share (nếu có)
+        alt_path = os.path.join(pkg_share, 'scripts', 'obstacle_avoidance.py')
+        if os.path.exists(alt_path):
+            script_path = alt_path
+        else:
+            # Log warning và dùng đường dẫn mặc định
+            import sys
+            print(f"[WARNING] Không tìm thấy obstacle_avoidance.py, đang dùng: {script_path}", file=sys.stderr)
+    
+    # Dùng ExecuteProcess với đường dẫn trực tiếp đến script
+    autonomous_drive_node = ExecuteProcess(
+        cmd=['python3', os.path.abspath(script_path),
+             '--ros-args',
+             '-r', '__node:=autonomous_drive',
+             '-p', 'use_sim_time:=true',
+             '-p', 'min_distance:=0.5',
+             '-p', 'safe_distance:=0.8',
+             '-p', 'max_linear_speed:=0.3',
+             '-p', 'max_angular_speed:=1.0',
+             '-p', 'front_angle_range:=60',
+             '-p', 'use_camera:=true',
+             '-p', 'camera_topic:=/camera/image_raw'],
         output='screen',
-        parameters=[{
-            'use_sim_time': True,
-            'min_distance': 0.5,
-            'safe_distance': 0.8,
-            'max_linear_speed': 0.3,
-            'max_angular_speed': 1.0,
-            'front_angle_range': 60,
-            'use_camera': True,
-            'camera_topic': '/camera/image_raw'
-        }]
+        additional_env={'PYTHONUNBUFFERED': '1'}
     )
     
     # Delay autonomous drive node để đợi robot spawn và LiDAR sẵn sàng
