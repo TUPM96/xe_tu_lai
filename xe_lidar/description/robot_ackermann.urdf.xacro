@@ -4,9 +4,6 @@
     <xacro:arg name="use_ros2_control" default="true"/>
     <xacro:arg name="sim_mode" default="false"/>
 
-    <!-- Include constants first -->
-    <xacro:include filename="constants.xacro" />
-
     <xacro:include filename="robot_core_ackermann.xacro" />
 
     <xacro:if value="$(arg use_ros2_control)">

@@ -1,8 +1,0 @@
-<?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-
-    <!-- Math constants -->
-    <xacro:property name="pi" value="3.1415926535897931"/>
-
-</robot>
-
