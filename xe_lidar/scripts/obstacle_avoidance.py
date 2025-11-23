@@ -148,30 +148,36 @@ class AutonomousDrive(Node):
             self.obstacle_detected = False
     
     def process_camera_lane_detection(self, image):
-        """Xử lý camera để phát hiện vạch kẻ đường và điều chỉnh đi giữa đường"""
+        """Xử lý camera để phát hiện 2 vạch trắng 2 bên đường và điều chỉnh đi giữa đường"""
         if image is None:
             return
         
         try:
-            # Chuyển sang grayscale
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            height, width = image.shape[:2]
             
-            # Áp dụng Gaussian blur
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            # Tạo vùng quan tâm (ROI) - phần dưới ảnh (vùng đường)
+            roi_top = int(height * 0.4)  # Bắt đầu từ 40% chiều cao
+            roi_bottom = height
+            roi = image[roi_top:roi_bottom, :]
+            
+            # Chuyển sang HSV để dễ phát hiện màu trắng
+            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Tạo mask cho màu trắng (vạch kẻ đường)
+            # Màu trắng trong HSV: V cao, S thấp
+            lower_white = np.array([0, 0, 200])  # Ngưỡng dưới cho màu trắng
+            upper_white = np.array([180, 30, 255])  # Ngưỡng trên cho màu trắng
+            white_mask = cv2.inRange(hsv, lower_white, upper_white)
+            
+            # Áp dụng Gaussian blur để làm mịn
+            blurred = cv2.GaussianBlur(white_mask, (5, 5), 0)
             
             # Phát hiện cạnh bằng Canny
             edges = cv2.Canny(blurred, 50, 150)
             
-            # Tạo mask cho vùng quan tâm (phần dưới của ảnh - vùng đường)
-            height, width = image.shape[:2]
-            roi_top = int(height * 0.5)  # Bắt đầu từ giữa ảnh
-            roi_bottom = height
-            mask = np.zeros_like(edges)
-            mask[roi_top:roi_bottom, :] = edges[roi_top:roi_bottom, :]
-            
             # Phát hiện đường thẳng bằng HoughLinesP
-            lines = cv2.HoughLinesP(mask, 1, np.pi/180, threshold=50, 
-                                   minLineLength=30, maxLineGap=10)
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=30, 
+                                   minLineLength=20, maxLineGap=15)
             
             if lines is None or len(lines) == 0:
                 self.lane_detected = False
@@ -181,51 +187,66 @@ class AutonomousDrive(Node):
             # Phân loại đường thẳng thành bên trái và bên phải
             left_lines = []
             right_lines = []
+            center_x = width / 2
             
             for line in lines:
                 x1, y1, x2, y2 = line[0]
-                # Tính góc của đường thẳng
+                # Tính góc và điểm giữa của đường thẳng
                 if x2 != x1:
                     slope = (y2 - y1) / (x2 - x1)
-                    # Đường bên trái có slope âm, bên phải có slope dương
-                    if slope < -0.3:  # Đường bên trái
+                    mid_x = (x1 + x2) / 2
+                    
+                    # Đường bên trái: slope âm và nằm bên trái màn hình
+                    # Đường bên phải: slope dương và nằm bên phải màn hình
+                    if slope < -0.2 and mid_x < center_x:  # Đường bên trái
                         left_lines.append(line[0])
-                    elif slope > 0.3:  # Đường bên phải
+                    elif slope > 0.2 and mid_x > center_x:  # Đường bên phải
                         right_lines.append(line[0])
             
-            # Tính điểm trung bình của các đường
-            left_x_avg = 0
-            right_x_avg = 0
-            center_x = width / 2
+            # Tính điểm trung bình của các đường ở dưới cùng của ROI
+            left_x_points = []
+            right_x_points = []
+            roi_height = roi_bottom - roi_top
             
-            if left_lines:
-                left_x_points = []
-                for line in left_lines:
-                    left_x_points.extend([line[0], line[2]])
-                left_x_avg = np.mean(left_x_points)
+            # Lấy điểm ở dưới cùng (y lớn nhất) của mỗi đường
+            for line in left_lines:
+                x1, y1, x2, y2 = line
+                # Lấy điểm có y lớn hơn (gần camera hơn)
+                if y1 > y2:
+                    left_x_points.append(x1)
+                else:
+                    left_x_points.append(x2)
             
-            if right_lines:
-                right_x_points = []
-                for line in right_lines:
-                    right_x_points.extend([line[0], line[2]])
-                right_x_avg = np.mean(right_x_points)
+            for line in right_lines:
+                x1, y1, x2, y2 = line
+                if y1 > y2:
+                    right_x_points.append(x1)
+                else:
+                    right_x_points.append(x2)
             
             # Tính offset từ giữa đường
-            if left_lines and right_lines:
-                # Có cả 2 vạch kẻ đường
+            if left_x_points and right_x_points:
+                # Có cả 2 vạch kẻ đường - đi giữa
+                left_x_avg = np.mean(left_x_points)
+                right_x_avg = np.mean(right_x_points)
                 lane_center = (left_x_avg + right_x_avg) / 2
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)  # Normalize về -1 đến 1
                 self.lane_detected = True
-            elif left_lines:
-                # Chỉ có vạch bên trái, giả định đường rộng 2m
-                lane_center = left_x_avg + width * 0.3  # Offset sang phải
+                self.get_logger().debug(f'Phát hiện 2 vạch: trái={left_x_avg:.1f}, phải={right_x_avg:.1f}, center={lane_center:.1f}')
+            elif left_x_points:
+                # Chỉ có vạch bên trái, giả định vạch phải cách 2m (khoảng 200 pixel)
+                left_x_avg = np.mean(left_x_points)
+                lane_center = left_x_avg + 200  # Offset sang phải
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-            elif right_lines:
-                # Chỉ có vạch bên phải, giả định đường rộng 2m
-                lane_center = right_x_avg - width * 0.3  # Offset sang trái
+                self.get_logger().debug(f'Chỉ phát hiện vạch trái: {left_x_avg:.1f}')
+            elif right_x_points:
+                # Chỉ có vạch bên phải, giả định vạch trái cách 2m
+                right_x_avg = np.mean(right_x_points)
+                lane_center = right_x_avg - 200  # Offset sang trái
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
+                self.get_logger().debug(f'Chỉ phát hiện vạch phải: {right_x_avg:.1f}')
             else:
                 self.lane_detected = False
                 self.lane_center_offset = 0.0
@@ -239,15 +260,15 @@ class AutonomousDrive(Node):
         """Vòng lặp điều khiển chính - kết hợp lane following và obstacle avoidance"""
         cmd = Twist()
         
+        # Chạy ngay khi có LiDAR, không chờ
         if self.latest_scan is None:
             # Chưa có dữ liệu LiDAR, chạy chậm để an toàn
-            # Chỉ warning mỗi 2 giây (20 lần * 0.1s) để tránh spam
             if self.lidar_warning_count % 20 == 0:
                 self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, chạy chậm để an toàn...')
             self.lidar_warning_count += 1
             
-            # Chạy chậm khi chưa có LiDAR (tốc độ 30% để an toàn)
-            cmd.linear.x = self.max_linear_speed * 0.3
+            # Chạy chậm khi chưa có LiDAR (tốc độ 50% để an toàn)
+            cmd.linear.x = self.max_linear_speed * 0.5
             cmd.angular.z = 0.0
             self.cmd_vel_pub.publish(cmd)
             return
@@ -266,15 +287,15 @@ class AutonomousDrive(Node):
                 cmd.angular.z = self.max_angular_speed * 0.8
                 self.get_logger().info('Vật cản phía trước - Lùi lại và quay phải')
             elif self.obstacle_direction < 0:
-                # Vật cản bên trái, quay phải mạnh
-                cmd.linear.x = self.max_linear_speed * 0.4
-                cmd.angular.z = -self.max_angular_speed * 0.9
-                self.get_logger().info('Vật cản bên trái - Quay phải')
+                # Vật cản bên trái, quay phải để tránh
+                cmd.linear.x = self.max_linear_speed * 0.6
+                cmd.angular.z = -self.max_angular_speed * 0.7
+                self.get_logger().info('Vật cản bên trái - Quay phải để tránh')
             else:
-                # Vật cản bên phải, quay trái mạnh
-                cmd.linear.x = self.max_linear_speed * 0.4
-                cmd.angular.z = self.max_angular_speed * 0.9
-                self.get_logger().info('Vật cản bên phải - Quay trái')
+                # Vật cản bên phải, quay trái để tránh
+                cmd.linear.x = self.max_linear_speed * 0.6
+                cmd.angular.z = self.max_angular_speed * 0.7
+                self.get_logger().info('Vật cản bên phải - Quay trái để tránh')
         else:
             # KHÔNG có vật cản - ƯU TIÊN 2: Đi theo vạch kẻ đường (Camera)
             if self.use_camera and self.lane_detected:
@@ -283,10 +304,10 @@ class AutonomousDrive(Node):
                 # Điều chỉnh góc quay dựa trên offset từ giữa đường
                 # offset > 0: lệch phải -> quay trái (angular > 0)
                 # offset < 0: lệch trái -> quay phải (angular < 0)
-                cmd.angular.z = -self.lane_center_offset * self.max_angular_speed * 0.6
+                cmd.angular.z = -self.lane_center_offset * self.max_angular_speed * 0.8
                 self.get_logger().debug(f'Đi theo vạch kẻ đường, offset: {self.lane_center_offset:.2f}')
             else:
-                # Không phát hiện được vạch kẻ đường, đi thẳng
+                # Không phát hiện được vạch kẻ đường, đi thẳng với tốc độ đầy đủ
                 cmd.linear.x = self.max_linear_speed
                 cmd.angular.z = 0.0
                 if self.use_camera:
