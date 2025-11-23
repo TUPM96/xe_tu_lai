@@ -53,7 +53,8 @@ def generate_launch_description():
     
     # Gazebo
     print("🌍 Node 2: Gazebo Simulator")
-    print(f"   World file: {world}")
+    world_default = os.path.join(pkg_share, 'worlds', 'road_map.world')
+    print(f"   World file: {world_default}")
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([

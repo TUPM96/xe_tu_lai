@@ -5,6 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -19,9 +20,16 @@ def generate_launch_description():
         ['xacro ', xacro_file, ' use_ros2_control:=', use_ros2_control, ' sim_mode:=', use_sim_time])
 
     # Create a robot_state_publisher node
-    params = {'robot_description': robot_description_config, 'use_sim_time': use_sim_time}
-    node_robot_state_publisher = Node(package='robot_state_publisher', executable='robot_state_publisher',
-        output='screen', parameters=[params])
+    params = {
+        'robot_description': ParameterValue(robot_description_config, value_type=str),
+        'use_sim_time': use_sim_time
+    }
+    node_robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        output='screen',
+        parameters=[params]
+    )
 
     # Launch!
     return LaunchDescription(
