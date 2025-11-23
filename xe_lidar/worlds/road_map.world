@@ -337,13 +337,13 @@
       </include>
     </model>
 
-    <!-- GUI Camera View: Nhìn từ đuôi xe, từ trên cao, về hướng đầu xe -->
+    <!-- GUI Camera View: Nhìn từ đuôi xe, từ trên cao, về hướng đầu xe (gần) -->
     <!-- Xe spawn ở x=-5.0, y=0.0, z=0.034 -->
     <gui fullscreen='0'>
       <camera name='user_camera'>
-        <!-- Pose: x=-6.5 (sau đuôi xe), y=0 (giữa đường), z=2.5 (từ trên cao) -->
-        <!-- rpy: roll=0, pitch=-0.4 (nhìn xuống ~23 độ), yaw=0 (nhìn về hướng +x, đầu xe) -->
-        <pose>-6.5 0.0 2.5 0 -0.4 0</pose>
+        <!-- Pose: x=-5.8 (gần đuôi xe), y=0 (giữa đường), z=1.5 (từ trên cao, gần hơn) -->
+        <!-- rpy: roll=0, pitch=-0.5 (nhìn xuống ~30 độ), yaw=0 (nhìn về hướng +x, đầu xe) -->
+        <pose>-5.8 0.0 1.5 0 -0.5 0</pose>
         <view_controller>orbit</view_controller>
         <projection_type>perspective</projection_type>
         <!-- Track target ở vị trí xe -->
