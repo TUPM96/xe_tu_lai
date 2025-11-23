@@ -79,8 +79,7 @@ def generate_launch_description():
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
     # Delay để đợi robot được spawn và LiDAR sẵn sàng
-    # Tạo thư mục libexec và symlink nếu chưa có (để ROS2 tìm thấy)
-    import subprocess
+    # Tìm file script và đảm bảo nó có thể được tìm thấy bởi ROS2
     pkg_libexec_dir = os.path.join(pkg_share_dir, 'libexec', package_name)
     pkg_lib_file = os.path.join(pkg_lib_dir, 'obstacle_avoidance.py')
     pkg_libexec_file = os.path.join(pkg_libexec_dir, 'obstacle_avoidance.py')
@@ -88,10 +87,31 @@ def generate_launch_description():
     # Tạo thư mục libexec nếu chưa có
     os.makedirs(pkg_libexec_dir, exist_ok=True)
     
-    # Tạo symlink nếu chưa có
+    # Copy hoặc symlink file vào libexec nếu chưa có
     if not os.path.exists(pkg_libexec_file):
         if os.path.exists(pkg_lib_file):
-            os.symlink(pkg_lib_file, pkg_libexec_file)
+            try:
+                # Thử tạo symlink (Linux/Mac)
+                os.symlink(pkg_lib_file, pkg_libexec_file)
+            except (OSError, NotImplementedError):
+                # Nếu symlink không được hỗ trợ (Windows), copy file
+                import shutil
+                shutil.copy2(pkg_lib_file, pkg_libexec_file)
+                # Đảm bảo file có quyền thực thi
+                os.chmod(pkg_libexec_file, 0o755)
+        else:
+            # Nếu không tìm thấy trong lib, thử tìm trong source
+            pkg_source_script = os.path.join(
+                get_package_share_directory(package_name),
+                '..', '..', '..', 'src', package_name, 'scripts', 'obstacle_avoidance.py'
+            )
+            if os.path.exists(pkg_source_script):
+                try:
+                    os.symlink(pkg_source_script, pkg_libexec_file)
+                except (OSError, NotImplementedError):
+                    import shutil
+                    shutil.copy2(pkg_source_script, pkg_libexec_file)
+                    os.chmod(pkg_libexec_file, 0o755)
     
     # Dùng Node với executable (ROS2 sẽ tìm trong libexec)
     autonomous_drive_node = Node(
