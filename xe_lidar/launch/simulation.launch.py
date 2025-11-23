@@ -2,7 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
-from launch.actions import RegisterEventHandler, ExecuteProcess, OpaqueFunction
+from launch.actions import RegisterEventHandler, ExecuteProcess
 from launch.event_handlers import OnProcessStart
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, Command, PathJoinSubstitution
@@ -10,21 +10,30 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
-def generate_launch_description(context):
-    """Generate launch description với world path đã được xử lý"""
+def generate_launch_description():
+    """Generate launch description"""
     package_name = 'xe_lidar'
     pkg_share = FindPackageShare(package=package_name).find(package_name)
     
-    # Lấy world argument và xử lý đường dẫn
-    world_arg = context.launch_configurations.get('world', 'road_map.world')
+    # Log thông tin
+    print("=" * 60)
+    print("🚀 KHỞI ĐỘNG SIMULATION")
+    print("=" * 60)
+    print(f"📦 Package: {package_name}")
+    print(f"📁 Share directory: {pkg_share}")
+    print("=" * 60)
     
-    # Nếu chỉ là tên file (không có '/' hoặc '\'), thêm đường dẫn package
-    if '/' not in world_arg and '\\' not in world_arg:
-        world_path = os.path.join(pkg_share, 'worlds', world_arg)
-    else:
-        world_path = world_arg
+    # World file argument
+    world_file_arg = DeclareLaunchArgument(
+        'world',
+        default_value=os.path.join(pkg_share, 'worlds', 'road_map.world'),
+        description='Path to world file'
+    )
+    
+    world = LaunchConfiguration('world')
     
     # Robot state publisher với sim time
+    print("📡 Node 1: Robot State Publisher (RSP)")
     rsp = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(
@@ -39,7 +48,9 @@ def generate_launch_description(context):
         }.items()
     )
     
-    # Gazebo với world path đã xử lý
+    # Gazebo
+    print("🌍 Node 2: Gazebo Simulator")
+    print(f"   World file: {world}")
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -49,12 +60,15 @@ def generate_launch_description(context):
             ])
         ]),
         launch_arguments={
-            'world': world_path,
+            'world': world,
             'verbose': 'true'
         }.items()
     )
     
     # Spawn robot vào Gazebo (delay để đợi Gazebo khởi động)
+    print("🤖 Node 3: Spawn Robot Entity (delay 5s)")
+    print("   Position: x=-5.0, y=-1.0, z=0.1")
+    print("   ⚠️  LiDAR plugin sẽ tự động load khi robot spawn")
     spawn_entity = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -72,6 +86,9 @@ def generate_launch_description(context):
     delayed_spawn_entity = TimerAction(period=5.0, actions=[spawn_entity])
     
     # Autonomous Drive Node với sim time
+    print("🧠 Node 4: Autonomous Drive")
+    print("   Subscribe: /scan (LiDAR), /camera/image_raw (Camera)")
+    print("   Publish: /cmd_vel (điều khiển xe)")
     autonomous_drive_node = Node(
         package=package_name,
         executable='obstacle_avoidance.py',
@@ -89,26 +106,25 @@ def generate_launch_description(context):
         }]
     )
     
-    return [
+    print("=" * 60)
+    print("📋 TÓM TẮT CÁC NODE:")
+    print("   1. Robot State Publisher (RSP) - ngay lập tức")
+    print("   2. Gazebo Simulator - ngay lập tức")
+    print("   3. Spawn Robot Entity - sau 5 giây")
+    print("      └─ LiDAR plugin tự động load khi spawn")
+    print("   4. Autonomous Drive Node - ngay lập tức")
+    print("      └─ Subscribe: /scan (LiDAR), /camera/image_raw (Camera)")
+    print("      └─ Publish: /cmd_vel (điều khiển xe)")
+    print("=" * 60)
+    print("🔍 Để kiểm tra LiDAR, chạy lệnh sau trong terminal khác:")
+    print("   ros2 topic list | grep scan")
+    print("   ros2 topic echo /scan --once")
+    print("=" * 60)
+    
+    return LaunchDescription([
+        world_file_arg,
         rsp,
         gazebo,
         delayed_spawn_entity,
         autonomous_drive_node,
-    ]
-
-
-def generate_launch_description_wrapper():
-    """Wrapper function để tạo launch description"""
-    package_name = 'xe_lidar'
-    
-    # World file argument
-    world_file_arg = DeclareLaunchArgument(
-        'world',
-        default_value='road_map.world',
-        description='World file name (e.g., test_map.world) or full path'
-    )
-    
-    return LaunchDescription([
-        world_file_arg,
-        OpaqueFunction(function=generate_launch_description),
     ])

@@ -17,6 +17,15 @@ def generate_launch_description():
     pkg_share_dir = os.path.dirname(pkg_share)  # install/xe_lidar/share -> install/xe_lidar
     pkg_lib_dir = os.path.join(pkg_share_dir, 'lib', package_name)  # install/xe_lidar/lib/xe_lidar
     
+    # Log thông tin
+    print("=" * 60)
+    print("🚀 KHỞI ĐỘNG SIMULATION ACKERMANN")
+    print("=" * 60)
+    print(f"📦 Package: {package_name}")
+    print(f"📁 Share directory: {pkg_share}")
+    print(f"📁 Lib directory: {pkg_lib_dir}")
+    print("=" * 60)
+    
     # World file argument
     world_file_arg = DeclareLaunchArgument(
         'world',
@@ -27,6 +36,7 @@ def generate_launch_description():
     world = LaunchConfiguration('world')
     
     # Robot state publisher với sim time (Ackermann)
+    print("📡 Node 1: Robot State Publisher (RSP)")
     rsp = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(
@@ -42,6 +52,8 @@ def generate_launch_description():
     )
     
     # Gazebo
+    print("🌍 Node 2: Gazebo Simulator")
+    print(f"   World file: {world}")
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -58,6 +70,9 @@ def generate_launch_description():
     
     # Spawn robot vào Gazebo (delay để đợi Gazebo khởi động)
     # Spawn ở đầu đường, giữa làn đường bên phải
+    print("🤖 Node 3: Spawn Robot Entity (delay 5s)")
+    print("   Position: x=-5.0, y=-1.0, z=0.1")
+    print("   ⚠️  LiDAR plugin sẽ tự động load khi robot spawn")
     spawn_entity = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -79,6 +94,8 @@ def generate_launch_description():
     
     # Autonomous Drive Node với sim time (Camera: lane detection, LiDAR: obstacle avoidance)
     # Delay để đợi robot được spawn và LiDAR sẵn sàng
+    print("🧠 Node 4: Autonomous Drive (delay 10s)")
+    print("   Script: obstacle_avoidance.py")
     # Tìm file script - ưu tiên lib, sau đó source directory
     pkg_lib_file = os.path.join(pkg_lib_dir, 'obstacle_avoidance.py')
     
@@ -118,7 +135,12 @@ def generate_launch_description():
         else:
             # Log warning và dùng đường dẫn mặc định
             import sys
-            print(f"[WARNING] Không tìm thấy obstacle_avoidance.py, đang dùng: {script_path}", file=sys.stderr)
+            print(f"⚠️  [WARNING] Không tìm thấy obstacle_avoidance.py, đang dùng: {script_path}", file=sys.stderr)
+    
+    if script_path and os.path.exists(script_path):
+        print(f"   ✅ Tìm thấy script: {script_path}")
+    else:
+        print(f"   ❌ Không tìm thấy script tại: {script_path}")
     
     # Dùng ExecuteProcess với đường dẫn trực tiếp đến script
     autonomous_drive_node = ExecuteProcess(
@@ -139,6 +161,21 @@ def generate_launch_description():
     
     # Delay autonomous drive node để đợi robot spawn và LiDAR sẵn sàng
     delayed_autonomous_drive = TimerAction(period=10.0, actions=[autonomous_drive_node])
+    
+    print("=" * 60)
+    print("📋 TÓM TẮT CÁC NODE:")
+    print("   1. Robot State Publisher (RSP) - ngay lập tức")
+    print("   2. Gazebo Simulator - ngay lập tức")
+    print("   3. Spawn Robot Entity - sau 5 giây")
+    print("      └─ LiDAR plugin tự động load khi spawn")
+    print("   4. Autonomous Drive Node - sau 10 giây")
+    print("      └─ Subscribe: /scan (LiDAR), /camera/image_raw (Camera)")
+    print("      └─ Publish: /cmd_vel (điều khiển xe)")
+    print("=" * 60)
+    print("🔍 Để kiểm tra LiDAR, chạy lệnh sau trong terminal khác:")
+    print("   ros2 topic list | grep scan")
+    print("   ros2 topic echo /scan --once")
+    print("=" * 60)
     
     return LaunchDescription([
         world_file_arg,

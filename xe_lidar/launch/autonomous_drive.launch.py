@@ -12,7 +12,14 @@ from launch_ros.actions import Node
 def generate_launch_description():
     package_name = 'xe_lidar'
     
+    print("=" * 60)
+    print("🚀 KHỞI ĐỘNG AUTONOMOUS DRIVE (REAL HARDWARE)")
+    print("=" * 60)
+    print(f"📦 Package: {package_name}")
+    print("=" * 60)
+    
     # Robot state publisher (sử dụng launch file có sẵn)
+    print("📡 Node 1: Robot State Publisher (RSP)")
     rsp = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(
@@ -28,6 +35,7 @@ def generate_launch_description():
     )
     
     # Twist mux để quản lý các nguồn cmd_vel
+    print("🔄 Node 2: Twist Mux")
     twist_mux_params = os.path.join(
         get_package_share_directory(package_name),
         'config',
@@ -42,6 +50,7 @@ def generate_launch_description():
     )
     
     # Controller manager
+    print("🎮 Node 3: Controller Manager (delay 3s)")
     robot_description = Command(['ros2 param get --hide-type /robot_state_publisher robot_description'])
     controller_params_file = os.path.join(
         get_package_share_directory(package_name),
@@ -54,32 +63,34 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description}, controller_params_file],
         output='screen'
     )
-    
+
     # Delay controller manager
     delayed_controller_manager = TimerAction(period=3.0, actions=[controller_manager])
     
     # Spawn controllers
+    print("⚙️  Node 4: Diff Drive Controller Spawner (sau khi controller manager start)")
     diff_drive_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['diff_cont'],
         output='screen'
     )
-    
+
     delayed_diff_drive_spawner = RegisterEventHandler(
         event_handler=OnProcessStart(
             target_action=controller_manager,
             on_start=[diff_drive_spawner]
         )
     )
-    
+
+    print("📊 Node 5: Joint State Broadcaster (sau khi controller manager start)")
     joint_broad_spawner = Node(
         package='controller_manager',
         executable='spawner',
         arguments=['joint_broad'],
         output='screen'
     )
-    
+
     delayed_joint_broad_spawner = RegisterEventHandler(
         event_handler=OnProcessStart(
             target_action=controller_manager,
@@ -88,6 +99,7 @@ def generate_launch_description():
     )
     
     # LiDAR
+    print("📡 Node 6: RPLIDAR Node")
     serial_port_arg = DeclareLaunchArgument(
         'serial_port',
         default_value='/dev/ttyUSB0',
@@ -115,6 +127,7 @@ def generate_launch_description():
     )
     
     # Camera
+    print("📷 Node 7: Camera Node")
     video_device_arg = DeclareLaunchArgument(
         'video_device',
         default_value='/dev/video0',
@@ -136,6 +149,9 @@ def generate_launch_description():
     )
     
     # Autonomous Drive Node (Camera: lane detection, LiDAR: obstacle avoidance)
+    print("🧠 Node 8: Autonomous Drive Node")
+    print("   Subscribe: /scan (LiDAR), /camera/image_raw (Camera)")
+    print("   Publish: /cmd_vel (điều khiển xe)")
     autonomous_drive_node = Node(
         package=package_name,
         executable='obstacle_avoidance.py',
@@ -152,6 +168,18 @@ def generate_launch_description():
             'camera_topic': '/camera/image_raw'
         }]
     )
+    
+    print("=" * 60)
+    print("📋 TÓM TẮT CÁC NODE:")
+    print("   1. Robot State Publisher (RSP) - ngay lập tức")
+    print("   2. Twist Mux - ngay lập tức")
+    print("   3. Controller Manager - sau 3 giây")
+    print("   4. Diff Drive Controller - sau khi controller manager start")
+    print("   5. Joint State Broadcaster - sau khi controller manager start")
+    print("   6. RPLIDAR Node - ngay lập tức")
+    print("   7. Camera Node - ngay lập tức")
+    print("   8. Autonomous Drive Node - ngay lập tức")
+    print("=" * 60)
     
     return LaunchDescription([
         serial_port_arg,
