@@ -4,12 +4,11 @@
     <joint name="camera_joint" type="fixed">
         <parent link="chassis"/>
         <child link="camera_link"/>
-        <!-- Camera đặt trên cao và nhìn xuống (bird's eye view / overhead camera)
-             Position: x=0, y=0, z=1.2m (cao 1.2m phía trên chassis)
-             Orientation: pitch=-1.4 rad (≈ -80°) để nhìn xuống đất
-             QUAN TRỌNG: pitch ÂM để nhìn XUỐNG, pitch DƯƠNG sẽ nhìn LÊN!
-             Setup này cho phép camera nhìn vạch kẻ đường từ góc trên cao (simulation) -->
-        <origin xyz="0.0 0 1.2" rpy="0 -1.4 0"/>
+        <!-- Camera third-person view: đặt phía sau xe, cao lên, nhìn về phía trước (nhìn vào xe)
+             Position: x=-1.5m (phía sau xe 1.5m), y=0 (giữa), z=1.2m (cao 1.2m)
+             Orientation: pitch=-0.5 rad (≈ -30°) nghiêng xuống vừa phải, nhìn về phía trước xe
+             Setup này giống camera third-person trong game racing -->
+        <origin xyz="-1.5 0 1.2" rpy="0 -0.5 0"/>
     </joint>
 
     <link name="camera_link">
