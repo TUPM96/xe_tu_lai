@@ -4,11 +4,12 @@
     <joint name="camera_joint" type="fixed">
         <parent link="chassis"/>
         <child link="camera_link"/>
-        <!-- Camera third-person view: đặt phía sau xe, cao lên, nhìn về phía trước (nhìn vào xe)
-             Position: x=-1.5m (phía sau xe 1.5m), y=0 (giữa), z=1.2m (cao 1.2m)
-             Orientation: pitch=-0.5 rad (≈ -30°) nghiêng xuống vừa phải, nhìn về phía trước xe
-             Setup này giống camera third-person trong game racing -->
-        <origin xyz="-1.5 0 1.2" rpy="0 -0.5 0"/>
+        <!-- Camera sensor gắn trên xe để lane detection (overhead/bird's eye view)
+             Position: x=0, y=0, z=1.2m (gắn trên đầu xe, cao 1.2m từ chassis)
+             Orientation: pitch=1.4 rad (≈ 80°) - Setup gốc ban đầu
+             Camera này dùng để detect vạch kẻ đường, KHÔNG phải camera view Gazebo!
+             Gazebo GUI camera (để xem simulation) là camera riêng, điều khiển bằng chuột -->
+        <origin xyz="0.0 0 1.2" rpy="0 1.4 0"/>
     </joint>
 
     <link name="camera_link">
