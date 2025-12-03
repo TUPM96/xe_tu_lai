@@ -4,11 +4,11 @@
     <joint name="camera_joint" type="fixed">
         <parent link="chassis"/>
         <child link="camera_link"/>
-        <!-- Camera đặt trên cao và nghiêng xuống để nhìn đường
-             Position: x=0.2m (phía trước), y=0 (giữa), z=0.25m (cao 25cm từ chassis)
-             Orientation: pitch=0.4 radian (≈ 23°) để nhìn xuống đường phía trước
-             (Không dùng 1.4 rad vì quá dốc, sẽ chỉ nhìn thấy gần xe) -->
-        <origin xyz="0.2 0 0.25" rpy="0 0.4 0"/>
+        <!-- Camera đặt trên cao và nhìn xuống (bird's eye view / overhead camera)
+             Position: x=0, y=0, z=1.2m (cao 1.2m phía trên chassis)
+             Orientation: pitch=1.4 rad (≈ 80°) để nhìn gần như thẳng xuống
+             Setup này cho phép camera nhìn vạch kẻ đường từ góc trên cao (simulation) -->
+        <origin xyz="0.0 0 1.2" rpy="0 1.4 0"/>
     </joint>
 
     <link name="camera_link">

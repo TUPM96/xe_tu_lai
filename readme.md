@@ -82,20 +82,7 @@ if slope > 0.2 and mid_x < center_x:  # ĐÚNG! ✅
     left_lines.append(line)
 ```
 
-### ❌ Lỗi 3: Camera pitch angle quá lớn
-**Trước đây**:
-```xml
-<origin xyz="0.0 0 1.2" rpy="0 1.4 0"/>
-<!-- pitch = 1.4 rad ≈ 80° → Nhìn gần như thẳng xuống, chỉ thấy trước mặt xe vài cm! -->
-```
-
-**Đã sửa**:
-```xml
-<origin xyz="0.2 0 0.25" rpy="0 0.4 0"/>
-<!-- pitch = 0.4 rad ≈ 23° → Nhìn xuống đường vừa phải, thấy xa hơn! ✅ -->
-```
-
-### ❌ Lỗi 4: Thiếu giới hạn góc lái cho Ackermann
+### ❌ Lỗi 3: Thiếu giới hạn góc lái cho Ackermann
 **Đã thêm**:
 ```python
 # Giới hạn angular velocity theo max_steer_angle (~30°)
@@ -104,7 +91,7 @@ cmd.angular.z = max(-max_angular_for_ackermann,
                    min(max_angular_for_ackermann, desired_angular))
 ```
 
-### ❌ Lỗi 5: Comments và priority logic sai
+### ❌ Lỗi 4: Comments và priority logic sai
 - ✅ Đã sửa tất cả comments cho đúng với logic thực tế
 - ✅ Làm rõ LiDAR có priority cao hơn Camera
 
@@ -796,7 +783,6 @@ Khi báo lỗi, vui lòng cung cấp:
 Hệ thống xe tự lái này đã được sửa lại hoàn toàn với:
 - ✅ Logic điều khiển Ackermann steering ĐÚNG
 - ✅ Slope classification cho lane detection ĐÚNG
-- ✅ Camera angle phù hợp
 - ✅ Giới hạn góc lái an toàn
 - ✅ Priority logic rõ ràng
 - ✅ Documentation chi tiết
