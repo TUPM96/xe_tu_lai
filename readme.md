@@ -1,78 +1,150 @@
-# Hệ thống Xe Tự Lái - Tránh Vật Cản Tự Động
+# Hệ Thống Xe Tự Lái 4 Bánh - Ackermann Steering
 
-Hệ thống xe tự lái sử dụng **Camera** và **LiDAR** để phát hiện và tránh vật cản tự động, không cần map hay navigation.
+> **Hệ thống xe tự lái thông minh sử dụng Ackermann Steering (4 bánh lái như ô tô thật)**
+> Kết hợp **Camera** (lane following) và **LiDAR** (obstacle avoidance) với ROS2 Humble
 
 **Repository**: [https://github.com/TUPM96/xe_tu_lai](https://github.com/TUPM96/xe_tu_lai)
 
-## Tính năng
+---
 
-- ✅ **Camera**: Phát hiện vạch kẻ đường và điều chỉnh để đi giữa đường
-- ✅ **LiDAR**: Phát hiện và tránh vật cản tự động
-- ✅ **Kết hợp thông minh**: Ưu tiên tránh vật cản, sau đó đi theo vạch kẻ đường
-- ✅ **Hỗ trợ 2 loại điều khiển**: Ackermann Steering (4 bánh) và Differential Drive (2 bánh)
-- ✅ **Điều khiển mượt mà** với ROS2 control
-- ✅ **Không cần map** - hoạt động hoàn toàn tự động
+## 🎯 Tính năng chính
 
-## Cấu trúc hệ thống
+### ✅ Điều khiển Ackermann Steering (4 bánh)
+- **4 bánh xe**: 2 bánh trước có khả năng lái, 2 bánh sau cố định
+- **Giống xe ô tô thật**: Bánh trái và phải có góc lái khác nhau (Ackermann geometry)
+- **Điều khiển mượt mà**: Phù hợp cho lane following và tự lái
+- **Giới hạn góc lái**: max ±30° (0.5236 rad) để an toàn
 
+### 🎥 Camera - Lane Following (Đi theo làn đường)
+- **Phát hiện vạch kẻ đường**: Sử dụng OpenCV (HSV + Canny + HoughLinesP)
+- **Tính toán offset**: Xác định vị trí xe so với giữa đường
+- **Điều khiển chính xác**:
+  - Xe lệch phải → quay trái tự động
+  - Xe lệch trái → quay phải tự động
+- **Xử lý đúng hệ tọa độ ảnh**: Slope classification chính xác
+
+### 🛑 LiDAR - Obstacle Avoidance (Tránh vật cản)
+- **Quét 360°**: RPLIDAR A1 phát hiện vật cản xung quanh
+- **Vùng phát hiện**: 60° phía trước (±30° từ trục xe)
+- **Quyết định thông minh**:
+  - Vật cản bên trái → quay phải
+  - Vật cản bên phải → quay trái
+  - Vật cản chặn đường → lùi lại và quay
+- **Khoảng cách an toàn**: 0.8m (có thể điều chỉnh)
+
+### 🧠 Logic điều khiển 2 mức độ ưu tiên
 ```
-xe_lidar/
-├── scripts/
-│   └── obstacle_avoidance.py    # Node xử lý tránh vật cản
-├── launch/
-│   ├── simulation.launch.py        # Launch file mô phỏng Gazebo ⭐
-│   ├── autonomous_drive.launch.py  # Launch file robot thật
-│   ├── launch_robot.launch.py      # Launch robot cơ bản
-│   ├── rplidar.launch.py           # Launch LiDAR riêng
-│   └── camera.launch.py            # Launch Camera riêng
-├── worlds/
-│   ├── road_map.world              # World đường phố 2 làn với vật cản 2 bên ⭐ (mặc định)
-│   ├── obstacles.world             # World có vật cản cơ bản
-│   ├── test_map.world              # World test với nhiều vật cản
-│   ├── maze_map.world              # World mê cung thử thách
-│   └── empty.world                 # World trống
-└── config/
-    └── my_controllers.yaml         # Cấu hình controller
+┌─────────────────────────────────────────┐
+│  PRIORITY 1 (CAO) - SAFETY              │
+│  LiDAR Obstacle Avoidance               │
+│  → Có vật cản? Tránh ngay lập tức!     │
+└──────────────┬──────────────────────────┘
+               │ Không có vật cản
+               ↓
+┌─────────────────────────────────────────┐
+│  PRIORITY 2 (THẤP) - NAVIGATION         │
+│  Camera Lane Following                  │
+│  → Phát hiện làn đường? Đi giữa làn!   │
+│  → Không thấy làn? Đi thẳng!           │
+└─────────────────────────────────────────┘
 ```
 
-## Yêu cầu hệ thống
+---
+
+## 🔧 Các lỗi đã sửa trong phiên bản này
+
+### ❌ Lỗi 1: Logic điều khiển góc lái SAI (NGHIÊM TRỌNG!)
+**Trước đây**:
+```python
+cmd.angular.z = -self.lane_center_offset * max_angular_speed  # SAI!
+# offset > 0 (lệch phải) → angular.z < 0 (quay phải) → Xe lệch phải càng xa!
+```
+
+**Đã sửa**:
+```python
+cmd.angular.z = self.lane_center_offset * max_angular_speed  # ĐÚNG!
+# offset > 0 (lệch phải) → angular.z > 0 (quay trái) → Xe quay về giữa! ✅
+```
+
+### ❌ Lỗi 2: Slope classification SAI (phân loại vạch trái/phải)
+**Trước đây**:
+```python
+if slope < -0.2 and mid_x < center_x:  # SAI! Vạch trái không có slope âm
+    left_lines.append(line)
+```
+
+**Đã sửa**:
+```python
+# ĐÚNG: Trong hệ tọa độ ảnh (Y tăng từ trên xuống):
+# - Vạch TRÁI: từ trên-trái xuống dưới-phải → slope DƯƠNG
+# - Vạch PHẢI: từ trên-phải xuống dưới-trái → slope ÂM
+if slope > 0.2 and mid_x < center_x:  # ĐÚNG! ✅
+    left_lines.append(line)
+```
+
+### ❌ Lỗi 3: Camera pitch angle quá lớn
+**Trước đây**:
+```xml
+<origin xyz="0.0 0 1.2" rpy="0 1.4 0"/>
+<!-- pitch = 1.4 rad ≈ 80° → Nhìn gần như thẳng xuống, chỉ thấy trước mặt xe vài cm! -->
+```
+
+**Đã sửa**:
+```xml
+<origin xyz="0.2 0 0.25" rpy="0 0.4 0"/>
+<!-- pitch = 0.4 rad ≈ 23° → Nhìn xuống đường vừa phải, thấy xa hơn! ✅ -->
+```
+
+### ❌ Lỗi 4: Thiếu giới hạn góc lái cho Ackermann
+**Đã thêm**:
+```python
+# Giới hạn angular velocity theo max_steer_angle (~30°)
+max_angular_for_ackermann = self.max_angular_speed * 0.9
+cmd.angular.z = max(-max_angular_for_ackermann,
+                   min(max_angular_for_ackermann, desired_angular))
+```
+
+### ❌ Lỗi 5: Comments và priority logic sai
+- ✅ Đã sửa tất cả comments cho đúng với logic thực tế
+- ✅ Làm rõ LiDAR có priority cao hơn Camera
+
+---
+
+## 📋 Yêu cầu hệ thống
 
 ### Hệ điều hành
-- **Ubuntu 22.04 LTS** (khuyến nghị)
-- Hoặc Ubuntu 20.04 với ROS2 Foxy (cần điều chỉnh)
+- **Ubuntu 22.04 LTS** (khuyến nghị mạnh mẽ)
+- Ubuntu 20.04 với ROS2 Foxy (cần điều chỉnh)
 
 ### Phần mềm
 - **ROS2 Humble Hawksbill** (bắt buộc)
-- Python 3.8+
-- OpenCV (python3-opencv)
-- NumPy
-- Gazebo (cho simulation)
-- Git
+- Python 3.10+
+- OpenCV (`python3-opencv`)
+- NumPy (`numpy<2.0` - quan trọng!)
+- Gazebo 11 (cho simulation)
+- `ackermann_steering_controller` (ROS2 control)
 
-### Phần cứng (Cho robot thật)
-- Raspberry Pi 4 hoặc máy tính có Ubuntu 22.04
-- RPLIDAR A1 hoặc tương đương
-- USB Camera
-- Hardware:
-  - **Ackermann steering**: 4 bánh với bánh lái (khuyến nghị)
-  - **Differential Drive**: 2 bánh (đơn giản hơn)
+### Phần cứng (Robot thật)
+- Raspberry Pi 4 (4GB RAM trở lên) hoặc máy tính Linux
+- **RPLIDAR A1** hoặc tương đương (360° laser scanner)
+- **USB Camera** (640x480 trở lên)
+- **Khung xe 4 bánh Ackermann**:
+  - 2 bánh trước với servo lái (góc lái ±30°)
+  - 2 bánh sau cố định với motor
+  - Wheelbase (khoảng cách trước-sau): ~40cm
+  - Track width (khoảng cách trái-phải): ~28cm
 
-### Yêu cầu hệ thống tối thiểu
-- CPU: 2 cores trở lên
-- RAM: 4GB trở lên (8GB khuyến nghị)
-- Dung lượng: 20GB trống trở lên
-- GPU: Không bắt buộc (nhưng khuyến nghị cho Gazebo)
+### Yêu cầu tối thiểu
+- **CPU**: 4 cores (2 cores tối thiểu)
+- **RAM**: 8GB (4GB tối thiểu)
+- **Dung lượng**: 30GB trống
+- **GPU**: Không bắt buộc (khuyến nghị cho Gazebo)
 
-## Cài đặt từ đầu
+---
 
-### Bước 1: Cài đặt Ubuntu 22.04 và ROS2 Humble
+## 🚀 Cài đặt
 
-#### 1.1. Cài đặt Ubuntu 22.04
-- Tải Ubuntu 22.04 Desktop từ [ubuntu.com](https://ubuntu.com/download/desktop)
-- Cài đặt trên máy ảo (VMware/VirtualBox) hoặc máy thật
-- Đảm bảo có ít nhất 20GB dung lượng và 4GB RAM
-
-#### 1.2. Cài đặt ROS2 Humble
+### Bước 1: Cài đặt ROS2 Humble
 
 ```bash
 # Cập nhật hệ thống
@@ -85,22 +157,21 @@ sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 # Thêm ROS2 repository
-sudo apt install -y software-properties-common
+sudo apt install -y software-properties-common curl gnupg lsb-release
 sudo add-apt-repository universe
-
-# Thêm ROS2 GPG key
-sudo apt update && sudo apt install -y curl gnupg lsb-release
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
-
-# Thêm ROS2 repository
 sudo sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2-latest.list'
 
-# Cài đặt ROS2 Humble
+# Cài đặt ROS2 Humble Desktop
 sudo apt update
 sudo apt install -y ros-humble-desktop
 
 # Cài đặt development tools
-sudo apt install -y python3-argcomplete python3-colcon-common-extensions python3-rosdep python3-vcstool
+sudo apt install -y \
+    python3-argcomplete \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool
 
 # Khởi tạo rosdep
 sudo rosdep init
@@ -111,233 +182,170 @@ echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### Bước 2: Tải source code từ GitHub
+### Bước 2: Clone repository
 
 ```bash
 # Tạo workspace
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 
-# Clone repository
+# Clone project
 git clone https://github.com/TUPM96/xe_tu_lai.git
-
-# Kiểm tra file Python script có trong repository
-ls -la xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
+cd ~/ros2_ws
 ```
 
 ### Bước 3: Cài đặt dependencies
 
 ```bash
-# Cài đặt dependencies cơ bản
-sudo apt update
+# Dependencies cho xe tự lái
 sudo apt install -y \
     ros-humble-cv-bridge \
     ros-humble-v4l2-camera \
     ros-humble-gazebo-ros-pkgs \
     ros-humble-gazebo-ros \
     ros-humble-ackermann-msgs \
+    ros-humble-xacro \
     python3-opencv \
     python3-numpy \
     python3-pip \
     gazebo
 
-# Cài đặt thêm Python packages nếu cần
-# QUAN TRỌNG: Cài NumPy 1.x để tương thích với cv_bridge (NumPy 2.x chưa được hỗ trợ)
-pip3 install "numpy<2.0" opencv-python
+# QUAN TRỌNG: NumPy phải < 2.0 (cv_bridge chưa hỗ trợ NumPy 2.x)
+pip3 install "numpy<2.0"
 
-# Cài đặt dependencies cho các package trong workspace
+# Cài đặt dependencies từ package.xml
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 ```
 
-### Bước 4: Build workspace
+### Bước 4: Cài đặt Ackermann Steering Controller
 
 ```bash
-# Di chuyển về thư mục workspace
-cd ~/ros2_ws
-
-# QUAN TRỌNG: Đảm bảo file Python có quyền thực thi
-chmod +x src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
-
-# Build workspace
-# File sẽ tự động được copy vào: install/xe_lidar/lib/xe_lidar/obstacle_avoidance.py
-colcon build --symlink-install
-
-# Kiểm tra file đã được cài đặt đúng vị trí
-ls -la install/xe_lidar/lib/xe_lidar/obstacle_avoidance.py
-
-# Source workspace
-source install/setup.bash
-
-# Thêm vào .bashrc để tự động source mỗi khi mở terminal
-echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
-```
-
-### Bước 5: Kiểm tra cài đặt
-
-```bash
-# Kiểm tra ROS2 environment
-printenv | grep ROS
-
-# Kiểm tra package đã được build
-ros2 pkg list | grep xe_lidar
-
-# Kiểm tra file Python script đã được cài đặt và có thể chạy
-ros2 run xe_lidar obstacle_avoidance.py --help
-
-# Nếu chạy được lệnh trên (hiển thị help) là OK! ✅
-```
-
-### Bước 6: Cài đặt ackermann_steering_controller (Tùy chọn - nếu dùng Ackermann)
-
-```bash
-# Clone ros2_controllers repository
 cd ~/ros2_ws/src
 git clone https://github.com/ros-controls/ros2_controllers.git -b humble
 
-# Cài đặt dependencies
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 
 # Build ackermann_steering_controller
 colcon build --packages-select ackermann_steering_controller
-
-# Source lại
 source install/setup.bash
 ```
 
-### Bước 7: Cấu hình quyền truy cập thiết bị (Cho robot thật)
+### Bước 5: Build project
 
 ```bash
-# Thêm user vào dialout group (cho serial port)
-sudo usermod -a -G dialout $USER
-
-# Cấp quyền cho camera
-sudo usermod -a -G video $USER
-
-# Logout và login lại để áp dụng thay đổi
-```
-
-## Cài đặt nhanh (Nếu đã có ROS2 Humble)
-
-Nếu bạn đã có ROS2 Humble được cài đặt, chỉ cần:
-
-```bash
-# 1. Clone repository
-cd ~/ros2_ws/src
-git clone https://github.com/TUPM96/xe_tu_lai.git
-
-# 2. Cài đặt dependencies
 cd ~/ros2_ws
-sudo apt install -y \
-    ros-humble-cv-bridge \
-    ros-humble-v4l2-camera \
-    ros-humble-gazebo-ros-pkgs \
-    ros-humble-gazebo-ros \
-    ros-humble-ackermann-msgs \
-    python3-opencv \
-    python3-numpy \
-    gazebo
 
-rosdep install --from-paths src --ignore-src -r -y
-
-# QUAN TRỌNG: Cài NumPy 1.x để tương thích với cv_bridge (NumPy 2.x chưa được hỗ trợ)
-pip3 install "numpy<2.0"
-
-# 3. Đảm bảo file Python có quyền thực thi
+# Cấp quyền thực thi cho Python scripts
 chmod +x src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
 
-# 4. Build
+# Build toàn bộ workspace
 colcon build --symlink-install
+
+# Source workspace
 source install/setup.bash
+
+# Thêm vào .bashrc để tự động
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 ```
 
-## Sử dụng
-
-### 1. Chạy mô phỏng trên Gazebo (Khuyến nghị để test)
+### Bước 6: Kiểm tra cài đặt
 
 ```bash
-source ~/ros2_ws/install/setup.bash
+# Kiểm tra package
+ros2 pkg list | grep xe_lidar
 
-# Chạy simulation với Ackermann steering (4 bánh, bánh lái) ⭐
+# Kiểm tra node có chạy được không
+ros2 run xe_lidar obstacle_avoidance.py --ros-args --help
+
+# Kiểm tra ackermann controller
+ros2 pkg list | grep ackermann_steering_controller
+```
+
+---
+
+## 🎮 Sử dụng
+
+### 1. Chạy Simulation (Gazebo) - Khuyến nghị để test
+
+```bash
+# Terminal 1: Chạy simulation với Ackermann steering
+cd ~/ros2_ws
+source install/setup.bash
 ros2 launch xe_lidar simulation_ackermann.launch.py
 
-# Hoặc chạy với differential drive (2 bánh) - cũ
-ros2 launch xe_lidar simulation.launch.py
-
-# Chạy với world test map (nhiều vật cản hơn)
-ros2 launch xe_lidar simulation.launch.py world:=test_map.world
-
-# Chạy với world mê cung (thử thách cao)
-ros2 launch xe_lidar simulation.launch.py world:=maze_map.world
-
-# Hoặc chạy với world trống
-ros2 launch xe_lidar simulation.launch.py world:=empty.world
-
-# Chạy với RViz2 tự động mở
-ros2 launch xe_lidar simulation.launch.py
+# Robot sẽ tự động xuất hiện trong Gazebo và bắt đầu tự lái!
+# Gazebo world mặc định: road_map.world (đường 2 làn với vật cản 2 bên)
 ```
 
-Robot sẽ tự động di chuyển và tránh vật cản trong môi trường mô phỏng!
-
-### 2. Chạy trên robot thật
-
+**Chọn world khác**:
 ```bash
-source ~/ros2_ws/install/setup.bash
+# World test với nhiều vật cản
+ros2 launch xe_lidar simulation_ackermann.launch.py world:=test_map.world
 
-# Chạy với Ackermann steering (4 bánh, bánh lái) ⭐
+# World mê cung (thử thách!)
+ros2 launch xe_lidar simulation_ackermann.launch.py world:=maze_map.world
+
+# World trống (tự do)
+ros2 launch xe_lidar simulation_ackermann.launch.py world:=empty.world
+```
+
+### 2. Chạy trên Robot thật
+
+**Terminal 1 - Khởi động robot hardware**:
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+
+# Chạy với Ackermann steering (4 bánh)
 ros2 launch xe_lidar launch_robot_ackermann.launch.py
-ros2 launch xe_lidar autonomous_drive.launch.py
+```
 
-# Hoặc chạy với differential drive (2 bánh) - cũ
-ros2 launch xe_lidar launch_robot.launch.py
+**Terminal 2 - Khởi động autonomous drive**:
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+
+# Chạy autonomous drive node
 ros2 launch xe_lidar autonomous_drive.launch.py
 ```
 
-### 3. Chạy từng thành phần riêng lẻ
+### 3. Chạy từng thành phần riêng lẻ (Debug)
 
-#### Chạy robot cơ bản (động cơ + controller)
-
+**LiDAR**:
 ```bash
-source ~/ros2_ws/install/setup.bash
-ros2 launch xe_lidar launch_robot.launch.py
-```
-
-#### Chạy LiDAR
-
-```bash
-source ~/ros2_ws/install/setup.bash
 ros2 launch xe_lidar rplidar.launch.py serial_port:=/dev/ttyUSB0
 ```
 
-#### Chạy Camera
-
+**Camera**:
 ```bash
-sudo chmod 777 /dev/video*
-source ~/ros2_ws/install/setup.bash
+sudo chmod 666 /dev/video0
 ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0
 ```
 
-#### Chạy Obstacle Avoidance Node
-
+**Autonomous Drive**:
 ```bash
-source ~/ros2_ws/install/setup.bash
 ros2 run xe_lidar obstacle_avoidance.py
 ```
 
-### 4. Điều khiển thủ công (tùy chọn)
-
-Nếu muốn điều khiển thủ công thay vì tự động:
+### 4. Điều khiển thủ công (Tùy chọn)
 
 ```bash
+# Cài đặt teleop (nếu chưa có)
+sudo apt install ros-humble-teleop-twist-keyboard
+
+# Chạy
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
-## Cấu hình
+---
 
-### Tham số Obstacle Avoidance
+## ⚙️ Cấu hình
 
-Có thể điều chỉnh các tham số trong launch file hoặc khi chạy node:
+### Tham số Autonomous Drive
+
+Có thể điều chỉnh trong `launch/autonomous_drive.launch.py` hoặc khi chạy:
 
 ```bash
 ros2 run xe_lidar obstacle_avoidance.py --ros-args \
@@ -346,257 +354,457 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args \
     -p max_linear_speed:=0.3 \
     -p max_angular_speed:=1.0 \
     -p front_angle_range:=60 \
-    -p use_camera:=true
+    -p max_steer_angle:=0.5236 \
+    -p use_camera:=true \
+    -p debug_camera:=false
 ```
 
-**Các tham số:**
-- `min_distance`: Khoảng cách tối thiểu để dừng (m) - mặc định: 0.5
-- `safe_distance`: Khoảng cách an toàn để bắt đầu tránh (m) - mặc định: 0.8
-- `max_linear_speed`: Tốc độ tối đa tiến/lùi (m/s) - mặc định: 0.3
-- `max_angular_speed`: Tốc độ quay tối đa (rad/s) - mặc định: 1.0
-- `front_angle_range`: Góc phía trước để kiểm tra (degrees) - mặc định: 60
-- `use_camera`: Bật/tắt sử dụng camera - mặc định: true
+| Tham số | Mặc định | Mô tả |
+|---------|----------|-------|
+| `min_distance` | 0.5 | Khoảng cách tối thiểu để dừng (m) |
+| `safe_distance` | 0.8 | Khoảng cách an toàn để bắt đầu tránh (m) |
+| `max_linear_speed` | 0.3 | Tốc độ tiến/lùi tối đa (m/s) |
+| `max_angular_speed` | 1.0 | Tốc độ quay tối đa (rad/s) |
+| `front_angle_range` | 60 | Góc phát hiện phía trước (degrees) |
+| `max_steer_angle` | 0.5236 | Góc lái tối đa (rad ≈ 30°) |
+| `use_camera` | true | Bật/tắt camera lane following |
+| `debug_camera` | false | Hiển thị debug output camera |
 
-## Kiểm tra hệ thống
+### Tham số Ackermann Controller
 
-### Xem dữ liệu LiDAR
+File: `config/my_controllers_ackermann.yaml`
+
+```yaml
+ackermann_steering_controller:
+  ros__parameters:
+    # Geometry (điều chỉnh theo robot thật)
+    wheel_radius: 0.034        # Bán kính bánh (m)
+    wheelbase: 0.4             # Khoảng cách bánh trước-sau (m)
+    track_width: 0.28          # Khoảng cách bánh trái-phải (m)
+
+    # Steering limits
+    max_steer_angle: 0.5236    # ~30 degrees
+
+    # Velocity limits
+    linear.x.max_velocity: 1.0
+    angular.z.max_velocity: 1.0
+```
+
+**Lưu ý**: Phải đo chính xác `wheelbase` và `track_width` từ robot thật!
+
+### Camera Lane Detection Tuning
+
+Trong `scripts/obstacle_avoidance.py`:
+
+```python
+# HSV white color range (điều chỉnh nếu vạch đường không trắng)
+lower_white = np.array([0, 0, 200])    # Ngưỡng dưới
+upper_white = np.array([180, 30, 255])  # Ngưỡng trên
+
+# Canny edge detection
+edges = cv2.Canny(blurred, 50, 150)    # Threshold: 50, 150
+
+# HoughLinesP parameters
+lines = cv2.HoughLinesP(
+    edges,
+    1,
+    np.pi/180,
+    threshold=30,      # Số điểm tối thiểu để tạo thành đường
+    minLineLength=20,  # Độ dài tối thiểu của đường (pixel)
+    maxLineGap=15      # Khoảng cách tối đa giữa các điểm (pixel)
+)
+
+# ROI (Region of Interest) - vùng dưới ảnh
+roi_top = int(height * 0.4)  # Bắt đầu từ 40% chiều cao
+```
+
+---
+
+## 🔍 Monitoring và Debug
+
+### 1. Xem dữ liệu LiDAR
 
 ```bash
+# Echo topic
 ros2 topic echo /scan
+
+# Visualize trong RViz2
+rviz2
+# Add → LaserScan → Topic: /scan
 ```
 
-### Xem ảnh camera
+### 2. Xem camera feed
 
 ```bash
+# Cài đặt image view (nếu chưa có)
+sudo apt install ros-humble-rqt-image-view
+
+# Xem camera
 ros2 run rqt_image_view rqt_image_view /camera/image_raw
 ```
 
-### Xem lệnh điều khiển
+### 3. Xem lệnh điều khiển
 
 ```bash
 ros2 topic echo /cmd_vel
 ```
 
-### Xem RViz2
+### 4. Xem logs
+
+```bash
+# Xem log của autonomous drive node
+ros2 topic echo /rosout | grep autonomous_drive
+
+# Hoặc chạy với debug level
+ros2 run xe_lidar obstacle_avoidance.py --ros-args --log-level debug
+```
+
+### 5. RViz2 visualization
 
 ```bash
 rviz2
 ```
 
-Trong RViz2, thêm:
-- **LaserScan** topic: `/scan`
-- **Image** topic: `/camera/image_raw`
-- **TF** để xem robot model
+Thêm các components:
+- **RobotModel**: Xem 3D model xe
+- **LaserScan** (`/scan`): Xem dữ liệu LiDAR
+- **Image** (`/camera/image_raw`): Xem camera
+- **TF**: Xem coordinate frames
 
-## Xử lý sự cố
+---
 
-### LiDAR không hoạt động
+## 🛠️ Troubleshooting
 
-1. Kiểm tra port:
+### ❌ Lỗi: `executable 'obstacle_avoidance.py' not found`
+
 ```bash
-ls -l /dev/serial/by-path/
-```
+# Kiểm tra file có quyền thực thi
+ls -la ~/ros2_ws/src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
 
-2. Kiểm tra quyền truy cập:
-```bash
-sudo chmod 666 /dev/ttyUSB0
-```
+# Cấp quyền
+chmod +x ~/ros2_ws/src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py
 
-3. Test LiDAR:
-```bash
-ros2 run rplidar_ros rplidar_composition --ros-args \
-    -p serial_port:=/dev/ttyUSB0 \
-    -p serial_baudrate:=115200
-```
-
-### Camera không hoạt động
-
-1. Kiểm tra device:
-```bash
-ls -l /dev/video*
-```
-
-2. Cấp quyền:
-```bash
-sudo chmod 777 /dev/video0
-```
-
-3. Test camera:
-```bash
-ros2 run v4l2_camera v4l2_camera_node
-```
-
-### Robot không di chuyển
-
-1. Kiểm tra controller:
-```bash
-ros2 control list_controllers
-```
-
-2. Kiểm tra topic cmd_vel:
-```bash
-ros2 topic echo /cmd_vel
-ros2 topic echo /diff_cont/cmd_vel_unstamped
-```
-
-3. Kiểm tra log của obstacle_avoidance node:
-```bash
-ros2 topic echo /rosout | grep obstacle_avoidance
-```
-
-## Nguyên lý hoạt động
-
-### Hệ thống kết hợp Camera + LiDAR:
-
-1. **Camera - Phát hiện vạch kẻ đường (Lane Detection)**:
-   - Sử dụng Canny edge detection và HoughLinesP để phát hiện vạch kẻ đường
-   - Tính toán offset từ giữa đường
-   - Điều chỉnh góc quay để đi giữa đường
-
-2. **LiDAR - Phát hiện và tránh vật cản**:
-   - Quét 360° và phát hiện vật cản trong vùng phía trước (60°)
-   - Xác định hướng vật cản (trái/phải/giữa)
-   - Ưu tiên cao nhất: tránh vật cản
-
-3. **Logic điều khiển (2 mức ưu tiên)**:
-   - **Ưu tiên 1 (Cao)**: Nếu có vật cản (LiDAR) → Tránh vật cản
-     - Vật cản bên trái: quay phải
-     - Vật cản bên phải: quay trái
-     - Vật cản ở giữa: lùi lại và quay
-   - **Ưu tiên 2 (Thấp)**: Nếu không có vật cản → Đi theo vạch kẻ đường (Camera)
-     - Phát hiện vạch kẻ đường: điều chỉnh để đi giữa
-     - Không phát hiện vạch: đi thẳng
-
-4. **Controller** nhận lệnh và điều khiển động cơ
-
-## Tùy chỉnh
-
-### Chọn loại điều khiển
-
-**Ackermann Steering (4 bánh, bánh lái)** - Khuyến nghị cho xe tự lái:
-- Giống xe ô tô thật
-- Điều khiển mượt mà hơn
-- Phù hợp với lane following
-
-**Differential Drive (2 bánh)** - Đơn giản hơn:
-- Dễ build và điều khiển
-- Quay tại chỗ được
-- Phù hợp với robot nhỏ
-
-### Tắt camera
-
-Chỉnh trong launch file hoặc khi chạy:
-```bash
-ros2 launch xe_lidar autonomous_drive.launch.py --ros-args \
-    -p use_camera:=false
-```
-
-### Điều chỉnh tốc độ
-
-Chỉnh các tham số `max_linear_speed` và `max_angular_speed` trong launch file:
-- `max_linear_speed`: Tốc độ tiến/lùi (m/s)
-- `max_angular_speed`: Tốc độ quay (rad/s)
-
-### Điều chỉnh tham số Ackermann
-
-Trong file `my_controllers_ackermann.yaml`:
-- `wheelbase`: Khoảng cách giữa bánh trước và sau (m)
-- `track_width`: Khoảng cách giữa 2 bánh trái/phải (m)
-- `max_steer_angle`: Góc quay tối đa của bánh lái (rad)
-
-## Lưu ý
-
-- **ROS2 Humble (Ubuntu 22.04)** được khuyến nghị
-- Đảm bảo LiDAR và Camera được kết nối đúng trước khi chạy
-- Kiểm tra quyền truy cập thiết bị (USB)
-- Điều chỉnh tham số phù hợp với môi trường thực tế
-- Luôn giám sát robot khi chạy tự động
-- Với Ackermann: Đảm bảo `ackermann_steering_controller` đã được cài đặt
-- Nếu không có `ackermann_steering_controller`, có thể dùng `twist_to_ackermann_drive` để convert cmd_vel
-
-## Troubleshooting
-
-### Lỗi khi build
-
-**Lỗi: Package không tìm thấy**
-```bash
-# Đảm bảo đã source ROS2
-source /opt/ros/humble/setup.bash
-
-# Kiểm tra package có trong workspace
-ros2 pkg list | grep xe_lidar
-```
-
-**Lỗi: Dependencies thiếu**
-```bash
-# Cài đặt lại dependencies
-cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
-```
-
-**Lỗi: Permission denied khi build**
-```bash
-# Kiểm tra quyền thư mục
-sudo chown -R $USER:$USER ~/ros2_ws
-```
-
-**Lỗi: rosdep init failed**
-```bash
-# Nếu đã init rồi, bỏ qua lỗi này
-# Hoặc xóa và init lại:
-sudo rm /etc/ros/rosdep/sources.list.d/20-default.list
-sudo rosdep init
-```
-
-**Lỗi: executable 'obstacle_avoidance.py' not found**
-
-Đảm bảo đã làm đúng các bước theo thứ tự:
-1. File có quyền thực thi: `chmod +x src/xe_tu_lai/xe_lidar/scripts/obstacle_avoidance.py`
-2. Build workspace: `cd ~/ros2_ws && colcon build --symlink-install`
-3. Kiểm tra file đã được cài: `ls -la install/xe_lidar/lib/xe_lidar/obstacle_avoidance.py`
-4. Source workspace: `source install/setup.bash`
-5. Test: `ros2 run xe_lidar obstacle_avoidance.py --help`
-
-### Lỗi khi chạy simulation
-
-**Gazebo không khởi động**
-```bash
-# Kiểm tra Gazebo đã cài đặt
-gazebo --version
-
-# Cài đặt lại nếu cần
-sudo apt install --reinstall gazebo ros-humble-gazebo-ros-pkgs
-```
-
-**Robot không spawn trong Gazebo**
-```bash
-# Kiểm tra URDF
-cd ~/ros2_ws
-source install/setup.bash
-xacro src/xe_tu_lai/xe_lidar/description/robot.urdf.xacro > /tmp/robot.urdf
-check_urdf /tmp/robot.urdf
-```
-
-**Lỗi: Could not find a package configuration file**
-```bash
-# Đảm bảo đã build workspace
+# Build lại
 cd ~/ros2_ws
 colcon build --symlink-install
 source install/setup.bash
 ```
 
-### Lỗi với Ackermann controller
+### ❌ Lỗi: LiDAR không hoạt động
 
-**Controller không tìm thấy**
 ```bash
-# Kiểm tra controller đã build
-ros2 pkg list | grep ackermann
+# 1. Kiểm tra device
+ls -l /dev/ttyUSB*
 
-# Nếu không có, build từ source (xem Bước 6 trong phần Cài đặt)
+# 2. Cấp quyền
+sudo chmod 666 /dev/ttyUSB0
+sudo usermod -a -G dialout $USER
+# (Logout và login lại)
+
+# 3. Test LiDAR
+ros2 run rplidar_ros rplidar_composition --ros-args \
+    -p serial_port:=/dev/ttyUSB0 \
+    -p serial_baudrate:=115200
+```
+
+### ❌ Lỗi: Camera không hoạt động
+
+```bash
+# 1. Kiểm tra device
+ls -l /dev/video*
+
+# 2. Cấp quyền
+sudo chmod 666 /dev/video0
+sudo usermod -a -G video $USER
+
+# 3. Test camera
+ros2 run v4l2_camera v4l2_camera_node --ros-args \
+    -p video_device:=/dev/video0
+```
+
+### ❌ Lỗi: Xe không di chuyển (simulation)
+
+```bash
+# Kiểm tra Gazebo đang chạy
+ps aux | grep gazebo
+
+# Kiểm tra cmd_vel có được publish không
+ros2 topic echo /cmd_vel
+
+# Kiểm tra controller
+ros2 control list_controllers
+```
+
+### ❌ Lỗi: `ackermann_steering_controller` not found
+
+```bash
+# Cài đặt từ source (xem Bước 4)
 cd ~/ros2_ws/src
 git clone https://github.com/ros-controls/ros2_controllers.git -b humble
 cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
 colcon build --packages-select ackermann_steering_controller
 source install/setup.bash
 ```
+
+### ❌ Lỗi: NumPy version incompatible
+
+```bash
+# cv_bridge chỉ hỗ trợ NumPy < 2.0
+pip3 install --upgrade "numpy<2.0"
+```
+
+### ❌ Xe đi lệch hoặc không về giữa làn đường
+
+✅ **Đã sửa trong version này!**
+- Kiểm tra đã update code mới nhất chưa
+- Logic `angular.z` đã được sửa (bỏ dấu trừ)
+- Slope classification đã được sửa đúng
+
+---
+
+## 📐 Nguyên lý hoạt động
+
+### 1. Kiến trúc hệ thống
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    ROS2 Nodes                         │
+├──────────────────────────────────────────────────────┤
+│                                                       │
+│  ┌─────────────┐         ┌──────────────┐           │
+│  │   Camera    │────────→│              │           │
+│  │   Node      │ img_raw │              │           │
+│  └─────────────┘         │  Autonomous  │           │
+│                          │    Drive     │  cmd_vel  │
+│  ┌─────────────┐         │    Node      │───────────┤───→ Controller
+│  │   LiDAR     │────────→│              │           │
+│  │   Node      │  scan   │              │           │
+│  └─────────────┘         └──────────────┘           │
+│                                                       │
+└──────────────────────────────────────────────────────┘
+                                    ↓
+                    ┌───────────────────────────────┐
+                    │ Ackermann Steering Controller │
+                    └───────────────────────────────┘
+                                    ↓
+            ┌───────────────┬───────────────┬───────────────┐
+            ↓               ↓               ↓               ↓
+     ┌──────────┐    ┌──────────┐   ┌──────────┐   ┌──────────┐
+     │  Front   │    │  Front   │   │   Rear   │   │   Rear   │
+     │  Left    │    │  Right   │   │   Left   │   │  Right   │
+     │  Wheel   │    │  Wheel   │   │  Wheel   │   │  Wheel   │
+     │ + Steer  │    │ + Steer  │   │  (Fixed) │   │  (Fixed) │
+     └──────────┘    └──────────┘   └──────────┘   └──────────┘
+```
+
+### 2. Camera Lane Detection
+
+**Quy trình xử lý**:
+```
+Raw Image (640x480)
+    ↓
+[ROI Selection] - Chọn vùng dưới ảnh (40% → 100% height)
+    ↓
+[HSV Conversion] - Chuyển sang HSV color space
+    ↓
+[White Mask] - Tạo mask cho màu trắng (vạch kẻ đường)
+    ↓
+[Gaussian Blur] - Làm mịn ảnh
+    ↓
+[Canny Edge Detection] - Phát hiện cạnh
+    ↓
+[HoughLinesP] - Phát hiện đường thẳng
+    ↓
+[Slope Classification] - Phân loại vạch trái/phải
+    ↓
+[Calculate Center] - Tính giữa đường
+    ↓
+[Calculate Offset] - Tính độ lệch từ giữa (-1 đến +1)
+    ↓
+lane_center_offset → Dùng cho điều khiển
+```
+
+**Hệ tọa độ ảnh**:
+```
+(0,0) ────────► X (width)
+  │
+  │     /        \      Camera view từ trên nhìn xuống
+  │    /          \
+  │   / (LEFT)  (RIGHT) \
+  │  ╱                  ╲
+  ▼ Y
+(height)
+
+- Vạch TRÁI: slope > 0 (y↑, x↑)
+- Vạch PHẢI: slope < 0 (y↑, x↓)
+```
+
+### 3. LiDAR Obstacle Detection
+
+```
+360° Laser Scan
+    ↓
+[Filter Front Region] - Chỉ lấy 60° phía trước (±30°)
+    ↓
+[Find Closest Obstacle] - Tìm vật cản gần nhất
+    ↓
+[Check Safe Distance] - So sánh với ngưỡng 0.8m
+    ↓
+IF obstacle < safe_distance:
+    [Determine Direction] - Xác định vật cản bên trái/phải/giữa
+    ↓
+    obstacle_detected = True
+    obstacle_direction = -1 (left) / 0 (center) / 1 (right)
+```
+
+### 4. Ackermann Steering Geometry
+
+```
+        Front Axle
+         /      \
+        /        \    ← Góc lái khác nhau
+       /          \
+    ●─────────────●  Front wheels (steering)
+    │             │
+    │             │  ← Wheelbase (0.4m)
+    │             │
+    ●─────────────●  Rear wheels (fixed)
+
+    ↑           ↑
+    Track Width (0.28m)
+```
+
+**Công thức Ackermann**:
+```
+δ_inner = atan(L / (R - W/2))    # Góc bánh trong
+δ_outer = atan(L / (R + W/2))    # Góc bánh ngoài
+
+Trong đó:
+- L: wheelbase
+- W: track_width
+- R: bán kính quay
+- δ: góc lái
+```
+
+**ROS2 `ackermann_steering_controller` tự động tính toán:**
+- Input: `cmd_vel` (linear.x, angular.z)
+- Output:
+  - Góc lái cho 2 bánh trước (tự động tính theo Ackermann)
+  - Vận tốc cho 4 bánh (tính theo công thức động học)
+
+### 5. Control Logic Flow
+
+```python
+def control_loop():
+    # PRIORITY 1: LiDAR (Safety)
+    if obstacle_detected:
+        if obstacle_direction == 0:  # Center/Both sides
+            cmd.linear.x = -0.15  # Reverse
+            cmd.angular.z = 0.8   # Turn right
+        elif obstacle_direction < 0:  # Left side
+            cmd.linear.x = 0.18   # Slow forward
+            cmd.angular.z = -0.7  # Turn right (away from obstacle)
+        else:  # Right side
+            cmd.linear.x = 0.18   # Slow forward
+            cmd.angular.z = 0.7   # Turn left (away from obstacle)
+
+    # PRIORITY 2: Camera (Navigation)
+    elif lane_detected:
+        cmd.linear.x = 0.3  # Full speed
+
+        # QUAN TRỌNG: Công thức ĐÚNG (đã sửa lỗi!)
+        desired_angular = lane_center_offset * max_angular_speed * 0.8
+        # offset > 0 (lệch phải) → angular.z > 0 (quay trái) ✅
+        # offset < 0 (lệch trái) → angular.z < 0 (quay phải) ✅
+
+        # Giới hạn góc lái
+        cmd.angular.z = clamp(desired_angular, -max_angular, max_angular)
+
+    # No lane detected
+    else:
+        cmd.linear.x = 0.3  # Go straight
+        cmd.angular.z = 0.0
+
+    publish(cmd_vel)
+```
+
+---
+
+## 📚 Tài liệu tham khảo
+
+### ROS2 Documentation
+- [ROS2 Humble](https://docs.ros.org/en/humble/)
+- [Ackermann Steering Controller](https://control.ros.org/humble/doc/ros2_controllers/ackermann_steering_controller/doc/userdoc.html)
+- [Gazebo ROS2 Integration](https://github.com/ros-simulation/gazebo_ros_pkgs)
+
+### Ackermann Steering
+- [Ackermann Steering Geometry](https://en.wikipedia.org/wiki/Ackermann_steering_geometry)
+- Paper: "Kinematic Models for Wheeled Mobile Robots"
+
+### Computer Vision
+- [OpenCV Lane Detection Tutorial](https://opencv.org/)
+- [Canny Edge Detection](https://docs.opencv.org/4.x/da/d22/tutorial_py_canny.html)
+- [Hough Line Transform](https://docs.opencv.org/4.x/d9/db0/tutorial_hough_lines.html)
+
+---
+
+## 🤝 Đóng góp
+
+Contributions are welcome! Hãy:
+1. Fork repository
+2. Tạo branch mới (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Tạo Pull Request
+
+---
+
+## 📝 License
+
+Project này được phát hành dưới license [MIT License](LICENSE).
+
+---
+
+## 🐛 Báo lỗi
+
+Nếu gặp lỗi, hãy tạo issue tại:
+- **GitHub Issues**: [https://github.com/TUPM96/xe_tu_lai/issues](https://github.com/TUPM96/xe_tu_lai/issues)
+
+Khi báo lỗi, vui lòng cung cấp:
+- Ubuntu version
+- ROS2 version (`ros2 --version`)
+- Log output (`ros2 launch ... --log-level debug`)
+- Screenshot/video nếu có thể
+
+---
+
+## ✅ Checklist trước khi chạy
+
+- [ ] Ubuntu 22.04 + ROS2 Humble đã cài đặt
+- [ ] Workspace đã build: `colcon build --symlink-install`
+- [ ] Đã source: `source install/setup.bash`
+- [ ] NumPy < 2.0: `pip3 list | grep numpy`
+- [ ] Ackermann controller đã có: `ros2 pkg list | grep ackermann`
+- [ ] File script có quyền thực thi: `ls -la scripts/`
+- [ ] LiDAR và Camera được kết nối (robot thật)
+- [ ] Quyền truy cập serial/video: `groups $USER`
+
+---
+
+## 🎉 Kết luận
+
+Hệ thống xe tự lái này đã được sửa lại hoàn toàn với:
+- ✅ Logic điều khiển Ackermann steering ĐÚNG
+- ✅ Slope classification cho lane detection ĐÚNG
+- ✅ Camera angle phù hợp
+- ✅ Giới hạn góc lái an toàn
+- ✅ Priority logic rõ ràng
+- ✅ Documentation chi tiết
+
+**Sẵn sàng để chạy và test!** 🚗💨
+
+---
+
+**Author**: TUPM96
+**Repository**: [https://github.com/TUPM96/xe_tu_lai](https://github.com/TUPM96/xe_tu_lai)
+**Last Updated**: 2025-12-03
