@@ -2,6 +2,8 @@
 
 Dự án đã được tổ chức lại thành 2 phần chính: **Raspberry Pi** (ROS2) và **Arduino** (điều khiển phần cứng).
 
+**Hệ thống điều khiển**: 1 Motor DC + 1 Servo (Ackermann Steering)
+
 ## 📁 Cấu trúc thư mục
 
 ```
@@ -64,15 +66,17 @@ xe_tu_lai/
 │  │  - Parse Serial command               │              │
 │  │  - Tính góc lái (Ackermann)          │              │
 │  │  - Điều khiển Servo (bánh lái)       │              │
-│  │  - Điều khiển Motor Driver (4 bánh)  │              │
+│  │  - Điều khiển 1 Motor DC (tiến/lùi)  │              │
 │  └──────────────────────────────────────┘              │
 │                                                         │
-│         ┌──────────┬──────────┐                         │
-│         │          │          │                         │
-│    ┌────▼───┐  ┌───▼───┐  ┌──▼────┐                    │
-│    │ Servo  │  │Motor A│  │Motor B│                    │
-│    │ (Pin 9)│  │(L298N)│  │(L298N)│                    │
-│    └────────┘  └───────┘  └───────┘                    │
+│              ┌──────────┬──────────┐                    │
+│              │          │          │                    │
+│         ┌────▼───┐  ┌───▼────┐                         │
+│         │ Servo  │  │ 1 Motor│                         │
+│         │ (Pin 9)│  │   DC   │                         │
+│         │        │  │(L298N) │                         │
+│         └────────┘  │Pin 2,3,5│                         │
+│                     └─────────┘                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -165,15 +169,11 @@ const int SERVO_CENTER = 90;           // Góc giữa của servo (degrees)
 
 ### Arduino Pin
 
-- **Pin 9**: Servo bánh lái (PWM)
-- **Motor A** (Bánh trái):
-  - Pin 2: IN1
-  - Pin 3: IN2
-  - Pin 5: PWM
-- **Motor B** (Bánh phải):
-  - Pin 4: IN1
-  - Pin 7: IN2
-  - Pin 6: PWM
+- **Pin 9**: Servo bánh lái (PWM signal)
+- **1 Motor DC chính** (điều khiển tốc độ tiến/lùi):
+  - Pin 2: IN1 (Motor Driver L298N/TB6612)
+  - Pin 3: IN2 (Motor Driver L298N/TB6612)
+  - Pin 5: PWM (Enable pin)
 
 ### Serial
 
@@ -209,8 +209,9 @@ const int SERVO_CENTER = 90;           // Góc giữa của servo (degrees)
 
 ### Robot không di chuyển
 - Kiểm tra motor driver đã được cấp nguồn chưa
-- Kiểm tra kết nối motor
-- Test từng motor riêng lẻ trong code Arduino
+- Kiểm tra kết nối motor DC (pins 2, 3, 5)
+- Kiểm tra motor có quay khi test thủ công không
+- Điều chỉnh `MAX_LINEAR_VELOCITY` nếu tốc độ quá thấp
 
 ### Servo không hoạt động
 - Kiểm tra pin 9 đã kết nối đúng
