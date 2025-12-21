@@ -42,12 +42,14 @@ install(
 # Cài vào cả 2 để đảm bảo ROS2 tìm thấy
 install(PROGRAMS
   scripts/obstacle_avoidance.py
+  scripts/arduino_bridge.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # Tạo thư mục libexec và cài file vào đó (ROS2 ưu tiên tìm ở đây)
 install(PROGRAMS
   scripts/obstacle_avoidance.py
+  scripts/arduino_bridge.py
   DESTINATION libexec/${PROJECT_NAME}
 )
 
