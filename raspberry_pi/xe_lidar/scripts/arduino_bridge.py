@@ -74,6 +74,7 @@ class ArduinoBridge(Node):
         self.last_cmd_time = time.time()
         self.last_linear = 0.0
         self.last_angular = 0.0
+        self.timeout_sent = False  # Flag để tránh gửi lệnh dừng liên tục
         
         # Timer để kiểm tra timeout và gửi lệnh dừng nếu cần
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
@@ -112,6 +113,7 @@ class ArduinoBridge(Node):
         self.last_cmd_time = time.time()
         self.last_linear = linear
         self.last_angular = angular
+        self.timeout_sent = False  # Reset timeout flag khi nhận lệnh mới
         
         # Gửi lệnh tới Arduino
         self.send_command(linear, angular)
@@ -171,13 +173,18 @@ class ArduinoBridge(Node):
         current_time = time.time()
         
         # Nếu không nhận được lệnh trong 0.5 giây, gửi lệnh dừng
+        # Chỉ gửi một lần để tránh spam Serial
         if current_time - self.last_cmd_time > 0.5:
-            if abs(self.last_linear) > 0.01 or abs(self.last_angular) > 0.01:
-                # Gửi lệnh dừng
+            if not self.timeout_sent and (abs(self.last_linear) > 0.01 or abs(self.last_angular) > 0.01):
+                # Gửi lệnh dừng (Arduino cũng có timeout riêng)
                 self.send_command(0.0, 0.0)
                 self.last_linear = 0.0
                 self.last_angular = 0.0
+                self.timeout_sent = True
                 self.get_logger().debug('Timeout - Gửi lệnh dừng tới Arduino')
+        else:
+            # Reset flag khi có lệnh mới
+            self.timeout_sent = False
     
     def destroy_node(self):
         """Cleanup khi node bị hủy"""

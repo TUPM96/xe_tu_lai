@@ -96,11 +96,19 @@ void loop() {
   readSerial();
   
   // Kiểm tra timeout
+  // Chỉ dừng motor nếu timeout và vẫn đang chạy
   if (millis() - last_command_time > COMMAND_TIMEOUT) {
-    // Không nhận được lệnh trong 500ms -> dừng robot
-    stopMotors();
-    current_linear = 0.0;
-    current_angular = 0.0;
+    // Timeout: dừng motor nếu đang chạy
+    if (abs(current_linear) > 0.01 || abs(current_angular) > 0.01) {
+      stopMotors();
+      // Reset chỉ một lần để tránh reset liên tục
+      static unsigned long last_timeout_reset = 0;
+      if (millis() - last_timeout_reset > 100) {  // Chỉ reset mỗi 100ms
+        current_linear = 0.0;
+        current_angular = 0.0;
+        last_timeout_reset = millis();
+      }
+    }
   }
   
   // Cập nhật điều khiển
@@ -146,11 +154,11 @@ void parseCommand(String cmd) {
       
       last_command_time = millis();
       
-      // Debug (có thể tắt sau khi test)
-      // Serial.print("Received: linear=");
-      // Serial.print(current_linear);
+      // Debug (có thể bật để test)
+      // Serial.print("Recv: linear=");
+      // Serial.print(current_linear, 3);
       // Serial.print(", angular=");
-      // Serial.println(current_angular);
+      // Serial.println(current_angular, 3);
     }
   }
 }
@@ -179,6 +187,8 @@ float calculateSteeringAngle(float angular_velocity) {
   // -> radius = linear_velocity / angular_velocity
   // steering_angle = atan(wheelbase / radius)
   // -> steering_angle = atan(wheelbase * angular_velocity / linear_velocity)
+  // 
+  // Lưu ý: Khi lùi (linear < 0), dấu của angular phải đảo ngược để quay đúng hướng
   
   float linear_vel = abs(current_linear);
   if (linear_vel < 0.05) {
@@ -188,8 +198,9 @@ float calculateSteeringAngle(float angular_velocity) {
   }
   
   // Tính góc quay theo công thức Ackermann
-  // steering_angle = atan(wheelbase * angular_velocity / linear_velocity)
-  float steer_angle = atan(WHEELBASE * angular_velocity / linear_vel);
+  // Khi lùi (current_linear < 0), phải đảo dấu angular để quay đúng
+  float effective_angular = (current_linear < 0) ? -angular_velocity : angular_velocity;
+  float steer_angle = atan(WHEELBASE * effective_angular / linear_vel);
   
   // Giới hạn góc quay
   steer_angle = constrain(steer_angle, -MAX_STEER_ANGLE, MAX_STEER_ANGLE);
