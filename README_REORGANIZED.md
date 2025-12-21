@@ -88,6 +88,8 @@ xe_tu_lai/
 
 ## 🚀 Hướng dẫn sử dụng
 
+> **⚠️ Lưu ý quan trọng**: Nên **test phần cứng trước** bằng các script Python (Bước 3) trước khi chạy với ROS2 để tránh lỗi và tiết kiệm thời gian debug.
+
 ### Bước 1: Chuẩn bị phần cứng
 
 1. **Kết nối Arduino với Motor DC và Servo**
@@ -125,31 +127,176 @@ xe_tu_lai/
 ### Bước 2: Cài đặt trên Raspberry Pi
 
 ```bash
-# 1. Cài đặt dependencies
+# 1. Cài đặt dependencies cơ bản
 sudo apt update
+sudo apt install -y \
+    python3-opencv \
+    python3-numpy \
+    python3-pip \
+    python3-serial
+
+# 2. Cài đặt pyserial cho test script và Arduino bridge
+pip3 install pyserial
+
+# 3. Cài đặt ROS2 dependencies (nếu chưa có ROS2)
 sudo apt install -y \
     ros-humble-cv-bridge \
     ros-humble-v4l2-camera \
-    ros-humble-ackermann-msgs \
-    python3-opencv \
-    python3-numpy \
-    python3-pip
+    ros-humble-ackermann-msgs
 
-# 2. Cài đặt pyserial cho Arduino bridge
-pip3 install pyserial
-
-# 3. Build workspace
+# 4. Build workspace
 cd ~/ros2_ws
 colcon build --symlink-install
 source install/setup.bash
 
-# 4. Thêm vào .bashrc để tự động source
+# 5. Thêm vào .bashrc để tự động source
 echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+
+# 6. Cấp quyền thực thi cho test scripts
+chmod +x src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/test_*.py
 ```
 
-### Bước 3: Chạy hệ thống
+### Bước 3: Test phần cứng trước (Khuyến nghị)
 
-Có 2 cách: **Chạy tất cả cùng lúc** (khuyến nghị) hoặc **Chạy từng phần**.
+**TRƯỚC KHI chạy ROS2**, nên test từng phần cứng để đảm bảo hoạt động tốt:
+
+#### Test Camera đầy đủ với Lane Detection (không cần ROS2)
+
+```bash
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+python3 test_camera_full.py --device 0
+```
+
+Hoặc chỉ định device khác:
+```bash
+python3 test_camera_full.py --device 1 --width 640 --height 480
+```
+
+**Tính năng:**
+- Hiển thị ảnh real-time với FPS counter
+- Phát hiện vạch kẻ đường (Lane Detection)
+- Vẽ vạch trái/phải/giữa đường
+- Hiển thị offset từ giữa đường
+
+**Điều khiển:**
+- Nhấn 'q' để thoát
+- Nhấn 's' để lưu ảnh
+- Nhấn 'd' để bật/tắt lane detection
+
+#### Test LiDAR A1M8 đầy đủ (không cần ROS2)
+
+**Cách 1: Sử dụng ROS2 topic (Khuyến nghị - chính xác nhất)**
+
+```bash
+# Terminal 1: Chạy rplidar_ros node
+ros2 launch xe_lidar rplidar.launch.py serial_port:=/dev/ttyUSB0
+
+# Terminal 2: Chạy test script
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+python3 test_lidar_a1m8.py --use-ros2 --duration 30
+```
+
+**Cách 2: Đọc trực tiếp từ Serial (đơn giản)**
+
+```bash
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+python3 test_lidar_a1m8.py --port /dev/ttyUSB0 --use-serial --duration 30
+```
+
+**Tính năng:**
+- Đọc dữ liệu quét 360 độ
+- Phát hiện vật cản phía trước (vùng 60°)
+- Hiển thị thống kê: số điểm, khoảng cách trung bình/gần nhất
+- Cảnh báo vật cản khi < 0.8m
+
+**Kiểm tra:**
+- Kết nối được với LiDAR
+- Nhận được dữ liệu quét
+- Phát hiện vật cản chính xác
+- Nhấn Ctrl+C để dừng
+
+#### Test Arduino (không cần ROS2)
+
+**Chế độ tương tác:**
+```bash
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+python3 test_arduino.py --port /dev/ttyACM0
+```
+
+Sau đó nhập lệnh:
+```
+0.3,0.0    # Tiến 0.3 m/s (thẳng)
+0.3,-0.5   # Tiến và quay trái
+0.2,0.5    # Tiến và quay phải
+0,0        # Dừng
+q          # Thoát
+```
+
+**Chế độ tự động:**
+```bash
+python3 test_arduino.py --port /dev/ttyACM0 --auto
+```
+
+**Kiểm tra:**
+- Arduino trả lời "READY" khi khởi động
+- Motor quay khi gửi lệnh tiến (linear > 0)
+- Servo quay khi gửi lệnh có angular (angular != 0)
+- Robot dừng khi gửi lệnh dừng (0,0)
+
+### Bước 4: Chạy Autonomous Drive với Python (KHÔNG CẦN ROS2)
+
+**Script chính chạy toàn bộ hệ thống giống như ROS2:**
+
+```bash
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+
+# Chạy với tất cả tính năng
+python3 autonomous_drive_python.py \
+    --camera-device 0 \
+    --lidar-port /dev/ttyUSB0 \
+    --arduino-port /dev/ttyACM0 \
+    --show-display
+```
+
+**Hoặc sử dụng LiDAR từ ROS2 (chính xác hơn):**
+
+```bash
+# Terminal 1: Chạy rplidar_ros node
+ros2 launch xe_lidar rplidar.launch.py serial_port:=/dev/ttyUSB0
+
+# Terminal 2: Chạy autonomous drive
+python3 autonomous_drive_python.py \
+    --use-ros2-lidar \
+    --camera-device 0 \
+    --arduino-port /dev/ttyACM0 \
+    --show-display
+```
+
+**Các tùy chọn:**
+```bash
+--camera-device 0              # Device ID camera
+--lidar-port /dev/ttyUSB0      # Port LiDAR (nếu không dùng ROS2)
+--arduino-port /dev/ttyACM0    # Port Arduino (None = auto detect)
+--use-ros2-lidar               # Sử dụng ROS2 topic /scan (khuyến nghị)
+--show-display                 # Hiển thị camera và thông tin
+--no-camera                    # Tắt camera
+--max-linear-speed 0.3         # Tốc độ tối đa (m/s)
+--max-angular-speed 1.0        # Tốc độ quay tối đa (rad/s)
+--safe-distance 0.8            # Khoảng cách an toàn (m)
+```
+
+**Logic điều khiển (giống hệt ROS2):**
+- ✅ Ưu tiên 1: Tránh vật cản (LiDAR) - Safety
+- ✅ Ưu tiên 2: Đi theo vạch kẻ đường (Camera) - Navigation
+- ✅ Điều khiển Ackermann: 1 Motor DC + 1 Servo
+
+**Điều khiển:**
+- Nhấn 'q' để thoát
+- Nhấn 's' để dừng robot
+
+### Bước 5: Chạy hệ thống với ROS2 (Tùy chọn)
+
+Sau khi test xong tất cả phần cứng, mới chạy với ROS2. Có 2 cách: **Chạy tất cả cùng lúc** (khuyến nghị) hoặc **Chạy từng phần**.
 
 #### Cách 1: Chạy tất cả cùng lúc (Khuyến nghị)
 
@@ -194,7 +341,7 @@ source ~/ros2_ws/install/setup.bash
 ros2 run xe_lidar obstacle_avoidance.py
 ```
 
-### Bước 4: Kiểm tra hệ thống
+### Bước 6: Kiểm tra hệ thống ROS2
 
 #### Kiểm tra Camera
 ```bash
@@ -420,6 +567,22 @@ ros2 node list
 - **RPLIDAR**: [rplidar_ros](https://github.com/Slamtec/rplidar_ros)
 
 ## 🎯 Tóm tắt lệnh nhanh
+
+### Test phần cứng (KHÔNG CẦN ROS2)
+
+```bash
+# Test Camera
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+python3 test_camera.py
+
+# Test LiDAR
+python3 test_lidar.py --port /dev/ttyUSB0
+
+# Test Arduino
+python3 test_arduino.py --port /dev/ttyACM0
+```
+
+### Chạy với ROS2
 
 ```bash
 # Chạy tất cả
