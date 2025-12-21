@@ -1,8 +1,13 @@
-# Xe Tự Lái - Cấu trúc Code đã tổ chức lại
+# Xe Tự Lái - Hệ thống Ackermann Steering
 
-Dự án đã được tổ chức lại thành 2 phần chính: **Raspberry Pi** (ROS2) và **Arduino** (điều khiển phần cứng).
+Hệ thống xe tự lái sử dụng **Camera** và **LiDAR** để phát hiện và tránh vật cản tự động, điều khiển bằng **1 Motor DC + 1 Servo** (Ackermann Steering).
 
-**Hệ thống điều khiển**: 1 Motor DC + 1 Servo (Ackermann Steering)
+## 📋 Tổng quan hệ thống
+
+- **Camera**: Phát hiện vạch kẻ đường và điều chỉnh để đi giữa đường
+- **LiDAR**: Phát hiện và tránh vật cản tự động
+- **Arduino**: Điều khiển 1 Motor DC (tốc độ) + 1 Servo (bánh lái)
+- **Raspberry Pi**: Xử lý AI và điều khiển qua ROS2
 
 ## 📁 Cấu trúc thư mục
 
@@ -14,17 +19,18 @@ xe_tu_lai/
 │   │   │   ├── obstacle_avoidance.py    # Node tự lái (Camera + LiDAR)
 │   │   │   └── arduino_bridge.py        # Node bridge gửi cmd_vel tới Arduino
 │   │   ├── launch/
-│   │   │   ├── autonomous_drive_arduino.launch.py  # Launch với Arduino
-│   │   │   ├── arduino_bridge.launch.py            # Chỉ launch bridge
-│   │   │   └── ... (các launch file khác)
+│   │   │   ├── autonomous_drive_arduino.launch.py  # Launch tất cả (Camera + LiDAR + Arduino)
+│   │   │   ├── arduino_bridge.launch.py            # Chỉ launch Arduino bridge
+│   │   │   ├── camera.launch.py                    # Chỉ launch Camera
+│   │   │   └── rplidar.launch.py                   # Chỉ launch LiDAR
 │   │   └── ...
 │   └── libs/              # Các thư viện ROS2
 │       ├── rplidar_ros/   # Driver cho RPLIDAR
 │       └── serial/        # Thư viện Serial
 │
 └── arduino/               # Code cho Arduino
-    ├── ackermann_motor_control.ino  # Code điều khiển motor + servo
-    └── README.md          # Hướng dẫn Arduino
+    ├── ackermann_motor_control.ino  # Code điều khiển 1 Motor DC + 1 Servo
+    └── README.md          # Hướng dẫn chi tiết Arduino
 ```
 
 ## 🔄 Kiến trúc hệ thống
@@ -80,55 +86,161 @@ xe_tu_lai/
 └─────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Sử dụng
+## 🚀 Hướng dẫn sử dụng
 
-### 1. Cài đặt trên Raspberry Pi
+### Bước 1: Chuẩn bị phần cứng
+
+1. **Kết nối Arduino với Motor DC và Servo**
+   - Xem hướng dẫn chi tiết trong `arduino/README.md`
+   - Upload code `arduino/ackermann_motor_control.ino` vào Arduino
+   - Kiểm tra Serial Monitor (115200 baud) - phải thấy "READY"
+
+2. **Kết nối phần cứng với Raspberry Pi**
+   - Arduino → USB → Raspberry Pi
+   - LiDAR → USB → Raspberry Pi  
+   - Camera → USB → Raspberry Pi
+
+3. **Kiểm tra các thiết bị**
+   ```bash
+   # Kiểm tra Arduino
+   ls /dev/ttyACM*
+   # Thường là /dev/ttyACM0
+   
+   # Kiểm tra LiDAR
+   ls /dev/ttyUSB*
+   # Thường là /dev/ttyUSB0
+   
+   # Kiểm tra Camera
+   ls /dev/video*
+   # Thường là /dev/video0
+   ```
+
+4. **Cấp quyền truy cập Serial**
+   ```bash
+   sudo usermod -a -G dialout $USER
+   sudo usermod -a -G video $USER
+   # Logout và login lại để áp dụng
+   ```
+
+### Bước 2: Cài đặt trên Raspberry Pi
 
 ```bash
-# Cài đặt pyserial cho Arduino bridge
+# 1. Cài đặt dependencies
+sudo apt update
+sudo apt install -y \
+    ros-humble-cv-bridge \
+    ros-humble-v4l2-camera \
+    ros-humble-ackermann-msgs \
+    python3-opencv \
+    python3-numpy \
+    python3-pip
+
+# 2. Cài đặt pyserial cho Arduino bridge
 pip3 install pyserial
 
-# Build workspace
+# 3. Build workspace
 cd ~/ros2_ws
 colcon build --symlink-install
 source install/setup.bash
+
+# 4. Thêm vào .bashrc để tự động source
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 ```
 
-### 2. Upload code Arduino
+### Bước 3: Chạy hệ thống
 
-1. Mở `arduino/ackermann_motor_control.ino` trong Arduino IDE
-2. Chọn board (Arduino Uno/Nano)
-3. Upload code
-4. Kiểm tra Serial Monitor (115200 baud) - phải thấy "READY"
+Có 2 cách: **Chạy tất cả cùng lúc** (khuyến nghị) hoặc **Chạy từng phần**.
 
-### 3. Chạy hệ thống
-
-#### Chạy đầy đủ với Arduino:
+#### Cách 1: Chạy tất cả cùng lúc (Khuyến nghị)
 
 ```bash
 source ~/ros2_ws/install/setup.bash
 
-# Chạy với Arduino (tự động phát hiện port)
+# Chạy tất cả: Camera + LiDAR + Arduino + Autonomous Drive
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py
+```
 
-# Hoặc chỉ định port cụ thể
+Hoặc chỉ định port cụ thể:
+```bash
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     arduino_serial_port:=/dev/ttyACM0 \
     lidar_serial_port:=/dev/ttyUSB0 \
     video_device:=/dev/video0
 ```
 
-#### Chạy từng phần:
+#### Cách 2: Chạy từng phần (Để test hoặc debug)
 
+**Terminal 1 - Bật Camera:**
 ```bash
-# Chỉ Arduino Bridge (để test)
+source ~/ros2_ws/install/setup.bash
+ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0
+```
+
+**Terminal 2 - Bật LiDAR:**
+```bash
+source ~/ros2_ws/install/setup.bash
+ros2 launch xe_lidar rplidar.launch.py serial_port:=/dev/ttyUSB0
+```
+
+**Terminal 3 - Bật Arduino Bridge:**
+```bash
+source ~/ros2_ws/install/setup.bash
 ros2 launch xe_lidar arduino_bridge.launch.py serial_port:=/dev/ttyACM0
+```
+
+**Terminal 4 - Bật Autonomous Drive:**
+```bash
+source ~/ros2_ws/install/setup.bash
+ros2 run xe_lidar obstacle_avoidance.py
+```
+
+### Bước 4: Kiểm tra hệ thống
+
+#### Kiểm tra Camera
+```bash
+# Xem ảnh từ camera
+ros2 run rqt_image_view rqt_image_view /camera/image_raw
+
+# Hoặc kiểm tra topic
+ros2 topic echo /camera/image_raw --once
+```
+
+#### Kiểm tra LiDAR
+```bash
+# Xem dữ liệu LiDAR
+ros2 topic echo /scan --once
+
+# Hoặc xem trong RViz2
+rviz2
+# Thêm LaserScan topic: /scan
+```
+
+#### Kiểm tra Arduino
+```bash
+# Kiểm tra topic cmd_vel
+ros2 topic echo /cmd_vel
 
 # Test gửi lệnh thủ công
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "linear: {x: 0.3}, angular: {z: 0.0}"
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.3, y: 0.0, z: 0.0}, \
+     angular: {x: 0.0, y: 0.0, z: 0.0}"
 
-# Chỉ Autonomous Drive (không có Arduino)
-ros2 run xe_lidar obstacle_avoidance.py
+# Test quay
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.2, y: 0.0, z: 0.0}, \
+     angular: {x: 0.0, y: 0.0, z: -0.5}"
+```
+
+#### Kiểm tra toàn bộ hệ thống
+```bash
+# Xem tất cả topics
+ros2 topic list
+
+# Xem node đang chạy
+ros2 node list
+
+# Xem log của autonomous_drive
+ros2 topic echo /rosout | grep autonomous_drive
 ```
 
 ## 📡 Giao thức giao tiếp
@@ -153,9 +265,33 @@ V:0.0:0.0\n     -> Dừng
 
 - Nếu không nhận được lệnh trong **500ms**, Arduino sẽ tự động dừng robot (safety feature)
 
-## ⚙️ Cấu hình Arduino
+## ⚙️ Cấu hình
 
-Các tham số trong `ackermann_motor_control.ino` có thể điều chỉnh:
+### Tham số Autonomous Drive
+
+Có thể điều chỉnh trong launch file hoặc khi chạy node:
+
+```bash
+ros2 run xe_lidar obstacle_avoidance.py --ros-args \
+    -p min_distance:=0.5 \
+    -p safe_distance:=0.8 \
+    -p max_linear_speed:=0.3 \
+    -p max_angular_speed:=1.0 \
+    -p front_angle_range:=60 \
+    -p use_camera:=true
+```
+
+**Các tham số:**
+- `min_distance`: Khoảng cách tối thiểu để dừng (m) - mặc định: 0.5
+- `safe_distance`: Khoảng cách an toàn để bắt đầu tránh (m) - mặc định: 0.8
+- `max_linear_speed`: Tốc độ tối đa tiến/lùi (m/s) - mặc định: 0.3
+- `max_angular_speed`: Tốc độ quay tối đa (rad/s) - mặc định: 1.0
+- `front_angle_range`: Góc phía trước để kiểm tra (degrees) - mặc định: 60
+- `use_camera`: Bật/tắt sử dụng camera - mặc định: true
+
+### Tham số Arduino
+
+Điều chỉnh trong file `arduino/ackermann_motor_control.ino`:
 
 ```cpp
 const float WHEELBASE = 0.4;           // Khoảng cách bánh trước/sau (m)
@@ -163,6 +299,7 @@ const float TRACK_WIDTH = 0.28;        // Khoảng cách bánh trái/phải (m)
 const float MAX_STEER_ANGLE = 0.5236;  // Góc quay tối đa (rad) ~30 độ
 const float WHEEL_RADIUS = 0.034;      // Bán kính bánh xe (m)
 const int SERVO_CENTER = 90;           // Góc giữa của servo (degrees)
+const float MAX_LINEAR_VELOCITY = 1.0; // Tốc độ tối đa (m/s)
 ```
 
 ## 🔧 Kết nối phần cứng
@@ -175,50 +312,127 @@ const int SERVO_CENTER = 90;           // Góc giữa của servo (degrees)
   - Pin 3: IN2 (Motor Driver L298N/TB6612)
   - Pin 5: PWM (Enable pin)
 
-### Serial
+### Serial Ports
 
-- Kết nối USB giữa Arduino và Raspberry Pi
-- Baudrate: **115200**
+- **Arduino**: `/dev/ttyACM0` hoặc `/dev/ttyUSB0` (baudrate: 115200)
+- **LiDAR**: `/dev/ttyUSB0` hoặc `/dev/ttyUSB1` (baudrate: 115200)
+- **Camera**: `/dev/video0`
 
-## 📝 Lưu ý
+Kiểm tra ports:
+```bash
+ls -l /dev/tty* | grep -E "ACM|USB"
+ls -l /dev/video*
+```
 
-1. **Điều chỉnh servo center**: Nếu bánh lái không thẳng, điều chỉnh `SERVO_CENTER` trong Arduino code
+## 📝 Lưu ý quan trọng
 
-2. **Hướng motor**: Nếu motor quay ngược, đổi chỗ IN1 và IN2 trong code
+1. **Thứ tự khởi động**: 
+   - Khuyến nghị dùng launch file `autonomous_drive_arduino.launch.py` để chạy tất cả cùng lúc
+   - Nếu chạy riêng, khởi động theo thứ tự: Camera → LiDAR → Arduino Bridge → Autonomous Drive
+
+2. **Quyền truy cập**: 
+   - Đảm bảo user đã được thêm vào groups `dialout` và `video`
+   - Logout và login lại sau khi thêm groups
 
 3. **Port Serial**: 
-   - Arduino thường ở `/dev/ttyACM0` hoặc `/dev/ttyUSB0`
-   - LiDAR thường ở `/dev/ttyUSB0` hoặc `/dev/ttyUSB1`
-   - Có thể dùng `ls /dev/tty*` để kiểm tra
+   - Nếu có nhiều thiết bị USB, port có thể thay đổi
+   - Dùng `ls -l /dev/tty*` để kiểm tra port mới nhất
 
-4. **Quyền truy cập Serial**: Đảm bảo user có quyền truy cập serial port:
-   ```bash
-   sudo usermod -a -G dialout $USER
-   # Logout và login lại
-   ```
+4. **Safety**: 
+   - Luôn test trong môi trường an toàn
+   - Code có timeout tự động dừng khi mất kết nối
+   - Kiểm tra robot trước khi chạy tự động
 
-5. **Safety**: Code Arduino có tính năng timeout - nếu mất kết nối, robot sẽ tự động dừng sau 500ms
+5. **Điều chỉnh tham số**: 
+   - Điều chỉnh tốc độ và khoảng cách an toàn phù hợp với môi trường thực tế
+   - Điều chỉnh servo center nếu bánh lái không thẳng
 
 ## 🔍 Troubleshooting
 
+### Camera không hoạt động
+```bash
+# Kiểm tra device
+ls -l /dev/video*
+
+# Cấp quyền
+sudo chmod 777 /dev/video0
+
+# Test camera
+ros2 run v4l2_camera v4l2_camera_node
+```
+
+### LiDAR không hoạt động
+```bash
+# Kiểm tra port
+ls -l /dev/ttyUSB*
+
+# Cấp quyền
+sudo chmod 666 /dev/ttyUSB0
+
+# Test LiDAR
+ros2 run rplidar_ros rplidar_composition --ros-args \
+    -p serial_port:=/dev/ttyUSB0 \
+    -p serial_baudrate:=115200
+```
+
 ### Arduino không nhận lệnh
-- Kiểm tra Serial Monitor xem có nhận được "READY" không
-- Kiểm tra baudrate (115200)
-- Kiểm tra kết nối USB
-- Kiểm tra quyền truy cập: `ls -l /dev/ttyACM0`
+```bash
+# Kiểm tra Serial Monitor trên Arduino IDE
+# Phải thấy "READY" khi khởi động
+
+# Kiểm tra kết nối từ Raspberry Pi
+ros2 launch xe_lidar arduino_bridge.launch.py serial_port:=/dev/ttyACM0
+
+# Kiểm tra quyền truy cập
+ls -l /dev/ttyACM0
+sudo usermod -a -G dialout $USER
+```
 
 ### Robot không di chuyển
-- Kiểm tra motor driver đã được cấp nguồn chưa
-- Kiểm tra kết nối motor DC (pins 2, 3, 5)
-- Kiểm tra motor có quay khi test thủ công không
-- Điều chỉnh `MAX_LINEAR_VELOCITY` nếu tốc độ quá thấp
+```bash
+# Kiểm tra cmd_vel có được publish không
+ros2 topic echo /cmd_vel
 
-### Servo không hoạt động
-- Kiểm tra pin 9 đã kết nối đúng
-- Kiểm tra nguồn servo (5V)
-- Điều chỉnh `SERVO_CENTER` nếu bánh lái không thẳng
+# Kiểm tra Arduino bridge có gửi lệnh không
+ros2 topic echo /rosout | grep arduino_bridge
 
-### Bridge không kết nối
-- Kiểm tra port: `ros2 launch xe_lidar arduino_bridge.launch.py serial_port:=/dev/ttyACM0`
-- Kiểm tra log của node để xem lỗi cụ thể
+# Kiểm tra motor driver và nguồn
+# Xem hướng dẫn trong arduino/README.md
+```
 
+### Autonomous Drive không hoạt động
+```bash
+# Kiểm tra các topic có dữ liệu không
+ros2 topic echo /scan --once
+ros2 topic echo /camera/image_raw --once
+
+# Kiểm tra log
+ros2 topic echo /rosout | grep autonomous_drive
+
+# Kiểm tra node có đang chạy không
+ros2 node list
+```
+
+## 📚 Tài liệu tham khảo
+
+- **Arduino**: Xem `arduino/README.md` để biết chi tiết về code Arduino
+- **ROS2**: [ROS2 Documentation](https://docs.ros.org/en/humble/)
+- **RPLIDAR**: [rplidar_ros](https://github.com/Slamtec/rplidar_ros)
+
+## 🎯 Tóm tắt lệnh nhanh
+
+```bash
+# Chạy tất cả
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py
+
+# Chạy từng phần
+ros2 launch xe_lidar camera.launch.py
+ros2 launch xe_lidar rplidar.launch.py
+ros2 launch xe_lidar arduino_bridge.launch.py
+ros2 run xe_lidar obstacle_avoidance.py
+
+# Kiểm tra
+ros2 topic list
+ros2 node list
+ros2 topic echo /cmd_vel
+```
