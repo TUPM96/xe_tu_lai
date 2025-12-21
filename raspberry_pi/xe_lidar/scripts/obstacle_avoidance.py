@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Node xử lý xe tự lái:
-- Camera: Phát hiện vạch kẻ đường và điều chỉnh để đi giữa đường
-- LiDAR: Phát hiện và tránh vật cản
+Node xử lý xe tự lái với Ackermann Steering:
+- Camera: Phát hiện vạch kẻ đường và điều chỉnh để đi giữa đường (Lane Following)
+- LiDAR: Phát hiện và tránh vật cản (Obstacle Avoidance)
+- Priority: LiDAR (safety) > Camera (navigation)
 """
 
 import rclpy
@@ -28,6 +29,8 @@ class AutonomousDrive(Node):
         self.declare_parameter('front_angle_range', 60)  # Góc phía trước để kiểm tra (degrees)
         self.declare_parameter('use_camera', True)  # Sử dụng camera hay không
         self.declare_parameter('camera_topic', '/camera/image_raw')  # Topic camera
+        self.declare_parameter('max_steer_angle', 0.5236)  # Góc lái tối đa (rad) ~30 degrees
+        self.declare_parameter('debug_camera', False)  # Hiển thị debug camera output
         
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -35,6 +38,8 @@ class AutonomousDrive(Node):
         self.max_angular_speed = self.get_parameter('max_angular_speed').value
         self.front_angle_range = self.get_parameter('front_angle_range').value
         self.use_camera = self.get_parameter('use_camera').value
+        self.max_steer_angle = self.get_parameter('max_steer_angle').value
+        self.debug_camera = self.get_parameter('debug_camera').value
         
         # Subscribers
         self.scan_sub = self.create_subscription(
@@ -188,19 +193,20 @@ class AutonomousDrive(Node):
             left_lines = []
             right_lines = []
             center_x = width / 2
-            
+
             for line in lines:
                 x1, y1, x2, y2 = line[0]
                 # Tính góc và điểm giữa của đường thẳng
                 if x2 != x1:
                     slope = (y2 - y1) / (x2 - x1)
                     mid_x = (x1 + x2) / 2
-                    
-                    # Đường bên trái: slope âm và nằm bên trái màn hình
-                    # Đường bên phải: slope dương và nằm bên phải màn hình
-                    if slope < -0.2 and mid_x < center_x:  # Đường bên trái
+
+                    # QUAN TRỌNG: Trong hệ tọa độ ảnh, Y tăng từ trên xuống
+                    # Vạch bên TRÁI: từ trên-trái xuống dưới-phải → slope DƯƠNG (y↑, x↑)
+                    # Vạch bên PHẢI: từ trên-phải xuống dưới-trái → slope ÂM (y↑, x↓)
+                    if slope > 0.2 and mid_x < center_x:  # Đường bên trái (slope dương, bên trái màn hình)
                         left_lines.append(line[0])
-                    elif slope > 0.2 and mid_x > center_x:  # Đường bên phải
+                    elif slope < -0.2 and mid_x > center_x:  # Đường bên phải (slope âm, bên phải màn hình)
                         right_lines.append(line[0])
             
             # Tính điểm trung bình của các đường ở dưới cùng của ROI
@@ -258,9 +264,9 @@ class AutonomousDrive(Node):
     
     def control_loop(self):
         """
-        Vòng lặp điều khiển chính:
-        - ƯU TIÊN CHÍNH: Camera để đi đúng tim đường (lane following)
-        - ƯU TIÊN PHỤ: LiDAR chỉ để tránh vật cản khi cần thiết
+        Vòng lặp điều khiển chính cho Ackermann Steering:
+        - ƯU TIÊN 1 (CAO - SAFETY): LiDAR để tránh vật cản
+        - ƯU TIÊN 2 (THẤP - NAVIGATION): Camera để đi đúng làn đường (lane following)
         """
         cmd = Twist()
         
@@ -300,21 +306,38 @@ class AutonomousDrive(Node):
                 cmd.angular.z = self.max_angular_speed * 0.7
                 self.get_logger().info('⚠️ Vật cản bên phải - Quay trái để tránh')
         else:
-            # KHÔNG có vật cản - ƯU TIÊN CHÍNH: Camera để đi đúng tim đường
+            # KHÔNG có vật cản - ƯU TIÊN 2: Camera để đi đúng làn đường
             if self.use_camera and self.lane_detected:
-                # Điều chỉnh để đi giữa đường dựa trên camera (đi đúng tim đường)
+                # Điều chỉnh để đi giữa đường dựa trên camera (lane following)
                 cmd.linear.x = self.max_linear_speed
-                # Điều chỉnh góc quay dựa trên offset từ giữa đường
-                # offset > 0: lệch phải -> quay trái (angular > 0)
-                # offset < 0: lệch trái -> quay phải (angular < 0)
-                cmd.angular.z = -self.lane_center_offset * self.max_angular_speed * 0.8
-                self.get_logger().debug(f'📷 Đi theo vạch kẻ đường (Camera), offset: {self.lane_center_offset:.2f}')
+
+                # Điều chỉnh góc quay dựa trên offset từ giữa đường (Ackermann steering)
+                # QUAN TRỌNG:
+                # - lane_center_offset > 0: xe lệch PHẢI → cần quay TRÁI (angular.z > 0)
+                # - lane_center_offset < 0: xe lệch TRÁI → cần quay PHẢI (angular.z < 0)
+                # - ROS2 convention: angular.z dương = quay trái, angular.z âm = quay phải
+
+                # Tính angular velocity (KHÔNG có dấu trừ - đã sửa lỗi!)
+                desired_angular = self.lane_center_offset * self.max_angular_speed * 0.8
+
+                # Giới hạn angular velocity theo max_steer_angle của Ackermann
+                # Giả sử wheelbase = 0.4m, vận tốc max = 0.3 m/s
+                # max_angular = v / (wheelbase / tan(max_steer_angle))
+                # Nhưng để đơn giản, giới hạn bằng tỷ lệ của max_angular_speed
+                max_angular_for_ackermann = self.max_angular_speed * 0.9  # 90% để an toàn
+                cmd.angular.z = max(-max_angular_for_ackermann,
+                                   min(max_angular_for_ackermann, desired_angular))
+
+                self.get_logger().debug(
+                    f'📷 Lane Following: offset={self.lane_center_offset:.2f}, '
+                    f'angular.z={cmd.angular.z:.2f} rad/s'
+                )
             else:
                 # Không phát hiện được vạch kẻ đường, đi thẳng với tốc độ đầy đủ
                 cmd.linear.x = self.max_linear_speed
                 cmd.angular.z = 0.0
                 if self.use_camera:
-                    self.get_logger().debug('📷 Không phát hiện vạch kẻ đường, đi thẳng')
+                    self.get_logger().debug('📷 Không phát hiện làn đường, đi thẳng')
         
         self.cmd_vel_pub.publish(cmd)
 

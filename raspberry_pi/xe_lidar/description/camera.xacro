@@ -4,7 +4,11 @@
     <joint name="camera_joint" type="fixed">
         <parent link="chassis"/>
         <child link="camera_link"/>
-        <!-- Camera đặt trên cao và nhìn thẳng xuống (pitch 1.4 radian ≈ 80 độ để đảo ngược hướng) -->
+        <!-- Camera sensor gắn trên xe để lane detection (overhead/bird's eye view)
+             Position: x=0, y=0, z=1.2m (gắn trên đầu xe, cao 1.2m từ chassis)
+             Orientation: pitch=1.4 rad (≈ 80°) - Setup gốc ban đầu
+             Camera này dùng để detect vạch kẻ đường, KHÔNG phải camera view Gazebo!
+             Gazebo GUI camera (để xem simulation) là camera riêng, điều khiển bằng chuột -->
         <origin xyz="0.0 0 1.2" rpy="0 1.4 0"/>
     </joint>
 
