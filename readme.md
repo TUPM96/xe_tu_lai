@@ -531,7 +531,17 @@ ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0
 
 **Kiểm tra:**
 - Terminal hiển thị: "Camera đã mở tại /dev/video0" và "Camera Node đã khởi động! (KHÔNG CẦN cv_bridge)"
-- Xem ảnh camera: `ros2 run rqt_image_view rqt_image_view /camera/image_raw`
+- Xem ảnh camera (cài rqt_image_view nếu chưa có):
+  ```bash
+  # Cài đặt rqt_image_view (chỉ cần cài 1 lần)
+  sudo apt install -y ros-jazzy-rqt-image-view
+  
+  # Xem ảnh camera
+  ros2 run rqt_image_view rqt_image_view /camera/image_raw
+  
+  # Xem ảnh debug (có vẽ lane và hướng lái)
+  ros2 run rqt_image_view rqt_image_view /camera/image_debug
+  ```
 - Kiểm tra topic: `ros2 topic echo /camera/image_raw --once`
 
 **Tùy chọn:**
@@ -738,10 +748,22 @@ ros2 run tf2_ros tf2_monitor
 ros2 node info /robot_state_publisher
 
 # 7. Nếu RSP có lỗi, kiểm tra xem URDF file có hợp lệ không:
+
+# Cách 1: Lấy robot_description từ RSP node đang chạy (khuyến nghị)
+ros2 param get /robot_state_publisher robot_description > /tmp/test_urdf.urdf
+cat /tmp/test_urdf.urdf | head -100
+
+# Cách 2: Kiểm tra URDF từ source directory
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar
+ros2 run xacro xacro description/robot_ackermann.urdf.xacro use_ros2_control:=false sim_mode:=false > /tmp/test_urdf.urdf
+cat /tmp/test_urdf.urdf | head -100
+
+# Cách 3: Dùng đường dẫn từ package share (sau khi build)
 cd ~/ros2_ws
 source install/setup.bash
-ros2 run xacro xacro install/xe_lidar/share/xe_lidar/description/robot_ackermann.urdf.xacro use_ros2_control:=false sim_mode:=false > /tmp/test_urdf.urdf
-# Nếu có lỗi, sẽ hiển thị trên terminal
+PKG_PATH=$(ros2 pkg prefix xe_lidar)/share/xe_lidar
+ros2 run xacro xacro ${PKG_PATH}/description/robot_ackermann.urdf.xacro use_ros2_control:=false sim_mode:=false > /tmp/test_urdf.urdf
+cat /tmp/test_urdf.urdf | head -100
 
 # 8. Kiểm tra có cần joint_states không (nếu URDF có joints)
 ros2 topic list | grep joint_state

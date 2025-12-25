@@ -57,6 +57,7 @@ class AutonomousDrive(Node):
                 self.image_callback,
                 10
             )
+            self.get_logger().info(f'Da subscribe topic {camera_topic} cho Camera')
             self.latest_image = None
             
             # Publisher cho ảnh camera đã vẽ lane detection
@@ -76,6 +77,8 @@ class AutonomousDrive(Node):
         self.lane_center_offset = 0.0  # Offset từ giữa đường (-1 đến 1)
         self.lane_detected = False
         self.lidar_warning_count = 0  # Đếm số lần warning để tránh spam
+        self.camera_received_count = 0  # Đếm số frame đã nhận từ camera
+        self.last_lane_log_time = 0.0  # Thời gian log cuối cùng về lane
         
         # Timer để xuất lệnh điều khiển
         self.timer = self.create_timer(0.1, self.control_loop)  # 10 Hz
@@ -118,6 +121,12 @@ class AutonomousDrive(Node):
             # Convert ROS Image message sang OpenCV image (KHÔNG CẦN cv_bridge)
             cv_image = self.imgmsg_to_cv2(msg, "bgr8")
             self.latest_image = cv_image
+            self.camera_received_count += 1
+            
+            # Log khi nhận ảnh camera lần đầu
+            if self.camera_received_count == 1:
+                self.get_logger().info('Da nhan duoc anh camera lan dau!')
+            
             if self.use_camera:
                 self.process_camera_lane_detection(cv_image)
         except Exception as e:
@@ -450,16 +459,24 @@ class AutonomousDrive(Node):
                 cmd.angular.z = max(-max_angular_for_ackermann,
                                    min(max_angular_for_ackermann, desired_angular))
 
-                self.get_logger().debug(
-                    f'📷 Lane Following: offset={self.lane_center_offset:.2f}, '
-                    f'angular.z={cmd.angular.z:.2f} rad/s'
-                )
+                # Log định kỳ về lane detection (mỗi 2 giây)
+                current_time = self.get_clock().now().seconds_nanoseconds()[0]
+                if current_time - self.last_lane_log_time >= 2.0:
+                    self.get_logger().info(
+                        f'📷 Phat hien lan duong - Offset: {self.lane_center_offset:.2f}, '
+                        f'Angular: {cmd.angular.z:.2f} rad/s'
+                    )
+                    self.last_lane_log_time = current_time
             else:
                 # Khong phat hien duoc vach ke duong, di thang voi toc do day du
                 cmd.linear.x = self.max_linear_speed
                 cmd.angular.z = 0.0
                 if self.use_camera:
-                    self.get_logger().debug('📷 Khong phat hien lan duong, di thang')
+                    # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
+                    current_time = self.get_clock().now().seconds_nanoseconds()[0]
+                    if current_time - self.last_lane_log_time >= 2.0:
+                        self.get_logger().info('📷 Khong phat hien lan duong - Di thang')
+                        self.last_lane_log_time = current_time
         
         self.cmd_vel_pub.publish(cmd)
 
