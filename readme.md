@@ -66,14 +66,12 @@ mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 
 # Clone project (thay đổi URL nếu cần)
-# git clone <your-repo-url> xe_lidar_1
+# git clone <your-repo-url> xe_tu_lai
 # Hoặc copy project vào đây
 cd ~/ros2_ws
 
-# Cài đặt dependencies ROS2
+# Cài đặt dependencies ROS2 (ĐƠN GIẢN - KHÔNG CẦN cv_bridge!)
 sudo aptitude install -y \
-    ros-jazzy-cv-bridge \
-    ros-jazzy-v4l2-camera \
     ros-jazzy-twist-mux \
     ros-jazzy-controller-manager \
     ros-jazzy-ackermann-msgs \
@@ -84,19 +82,16 @@ sudo aptitude install -y \
     python3-pip \
     python3-serial
 
-# Nếu v4l2_camera không tìm thấy, cài đặt từ source:
-# cd ~/ros2_ws/src
-# git clone https://github.com/ros2/v4l2_camera.git -b jazzy
-# cd ~/ros2_ws
-# rosdep install --from-paths src --ignore-src -r -y
-# colcon build --packages-select v4l2_camera
-# source install/setup.bash
+# Cài Python packages
+pip3 install pyserial
 
-# QUAN TRỌNG: NumPy phải < 2.0 (cv_bridge chưa hỗ trợ NumPy 2.x)
-pip3 install "numpy<2.0" pyserial
+# Lưu ý: camera_node.py tự convert OpenCV → ROS Image (KHÔNG CẦN cv_bridge!)
 
 # Cài đặt dependencies từ package.xml
 rosdep install --from-paths src --ignore-src -r -y
+
+# QUAN TRỌNG: Cấp quyền thực thi cho scripts TRƯỚC KHI build
+chmod +x ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/*.py
 
 # Build workspace
 colcon build --symlink-install
@@ -107,8 +102,9 @@ source install/setup.bash
 # Thêm vào .bashrc
 echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 
-# Cấp quyền thực thi cho scripts
-chmod +x src/xe_lidar_1/raspberry_pi/xe_lidar/scripts/*.py
+# Kiểm tra scripts đã được install
+ls -la install/xe_lidar/libexec/xe_lidar/
+ls -la install/xe_lidar/lib/xe_lidar/
 ```
 
 ### Bước 3: Cấp quyền truy cập thiết bị
@@ -136,22 +132,35 @@ sudo chmod 666 /dev/video0   # Camera
 
 ```bash
 cd ~/ros2_ws
+
+# QUAN TRỌNG: Cấp quyền và rebuild trước
+chmod +x src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/camera_node.py
+colcon build --packages-select xe_lidar
 source install/setup.bash
 
-# Chạy camera node
+# Chạy camera node (OpenCV - KHÔNG CẦN cv_bridge!)
 ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0
 ```
 
 **Kiểm tra:**
-- Terminal không có lỗi
+- Terminal hiển thị: "Camera đã mở tại /dev/video0" và "Camera Node đã khởi động! (KHÔNG CẦN cv_bridge)"
 - Xem ảnh camera: `ros2 run rqt_image_view rqt_image_view /camera/image_raw`
 - Kiểm tra topic: `ros2 topic echo /camera/image_raw --once`
 
+**Tùy chọn:**
+```bash
+# Thay đổi resolution và FPS
+ros2 launch xe_lidar camera.launch.py \
+    video_device:=/dev/video0 \
+    width:=320 \
+    height:=240 \
+    fps:=15
+```
+
 **Nếu camera bị nhảy hình:**
 ```bash
-# Xem file FIX_CAMERA.md để sửa lỗi
-# Hoặc thử format khác:
-ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0 pixel_format:=MJPG
+# Thử resolution nhỏ hơn
+ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0 width:=320 height:=240 fps:=15
 ```
 
 ### Test LiDAR
@@ -333,29 +342,48 @@ Thêm các components:
 
 ### Camera không hoạt động
 
-**Lỗi: package 'v4l2_camera' not found**
+**Lỗi: executable 'camera_node.py' not found**
 
 ```bash
-# Cách 1: Cài đặt từ apt (nếu có trong repo)
-sudo aptitude install -y ros-jazzy-v4l2-camera
-source /opt/ros/jazzy/setup.bash
+# 1. Cấp quyền thực thi cho scripts
+chmod +x ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/camera_node.py
 
-# Cách 2: Cài đặt từ source (nếu không có trong repo)
-cd ~/ros2_ws/src
-git clone https://github.com/ros2/v4l2_camera.git -b jazzy
-# Hoặc thử branch rolling nếu jazzy không có
-# git clone https://github.com/ros2/v4l2_camera.git -b rolling
-
+# 2. Rebuild workspace
 cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
-colcon build --packages-select v4l2_camera
+colcon build --packages-select xe_lidar
+
+# 3. Source lại
 source install/setup.bash
+
+# 4. Kiểm tra file đã được install
+ls -la install/xe_lidar/libexec/xe_lidar/camera_node.py
+ls -la install/xe_lidar/lib/xe_lidar/camera_node.py
+
+# 5. Test lại
+ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0
+```
+
+**Lưu ý**: `camera_node.py` tự convert OpenCV → ROS Image message, **KHÔNG CẦN cv_bridge**! Chỉ cần `python3-opencv`.
+
+**Lỗi: Không mở được camera**
+
+```bash
+# Kiểm tra camera device
+ls -l /dev/video*
+
+# Cấp quyền
+sudo chmod 666 /dev/video0
+sudo usermod -a -G video $USER
+# Logout và login lại
+
+# Kiểm tra camera có hoạt động không
+python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'FAIL'); cap.release()"
 ```
 
 **Camera bị nhảy hình:**
 ```bash
-# Thử format khác
-ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0 pixel_format:=MJPG
+# Thử resolution nhỏ hơn
+ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0 width:=320 height:=240 fps:=15
 
 # Hoặc cài đặt GStreamer plugins
 sudo aptitude install -y \
@@ -366,6 +394,11 @@ sudo aptitude install -y \
     gstreamer1.0-plugins-ugly \
     v4l-utils
 ```
+
+**Lưu ý**: 
+- Project này dùng `camera_node.py` (OpenCV) - **KHÔNG CẦN cv_bridge**!
+- `camera_node.py` tự convert OpenCV → ROS Image message, chỉ cần `python3-opencv`
+- Không cần cài `v4l2_camera` package
 
 ### LiDAR không hoạt động
 
@@ -384,11 +417,32 @@ ros2 run rplidar_ros rplidar_composition --ros-args \
 
 ### Arduino không nhận lệnh
 
-```bash
-# Kiểm tra Serial Monitor trên Arduino IDE
-# Phải thấy "READY" khi khởi động
+**Lỗi: executable 'arduino_bridge.py' not found**
 
-# Kiểm tra quyền
+```bash
+# 1. Cấp quyền thực thi cho scripts
+chmod +x ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/*.py
+
+# 2. Rebuild workspace
+cd ~/ros2_ws
+colcon build --symlink-install
+
+# 3. Source lại
+source install/setup.bash
+
+# 4. Kiểm tra file đã được install
+ls -la install/xe_lidar/libexec/xe_lidar/arduino_bridge.py
+ls -la install/xe_lidar/lib/xe_lidar/arduino_bridge.py
+
+# 5. Test lại
+ros2 launch xe_lidar arduino_bridge.launch.py serial_port:=/dev/ttyACM0
+```
+
+**Kiểm tra Serial Monitor trên Arduino IDE:**
+- Phải thấy "READY" khi khởi động
+
+**Kiểm tra quyền:**
+```bash
 sudo chmod 666 /dev/ttyACM0
 sudo usermod -a -G dialout $USER
 # Logout và login lại

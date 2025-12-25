@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-ROS2 Camera Node sử dụng OpenCV (thay thế v4l2_camera)
+ROS2 Camera Node sử dụng OpenCV (KHÔNG CẦN cv_bridge)
 Publish ảnh từ USB camera lên topic /camera/image_raw
 """
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
 import cv2
+import numpy as np
 import sys
 
 
@@ -45,21 +45,41 @@ class CameraNode(Node):
         # Publisher (publish vào /camera/image_raw để tương thích với code hiện tại)
         self.publisher = self.create_publisher(Image, '/camera/image_raw', 10)
         
-        # CV Bridge
-        self.bridge = CvBridge()
-        
         # Timer để publish ảnh
         timer_period = 1.0 / fps
         self.timer = self.create_timer(timer_period, self.timer_callback)
         
-        self.get_logger().info('Camera Node đã khởi động!')
+        self.get_logger().info('Camera Node đã khởi động! (KHÔNG CẦN cv_bridge)')
+    
+    def cv2_to_imgmsg(self, cv_image, encoding="bgr8"):
+        """
+        Convert OpenCV image (numpy array) sang ROS2 Image message
+        KHÔNG CẦN cv_bridge!
+        """
+        img_msg = Image()
+        img_msg.height, img_msg.width = cv_image.shape[:2]
+        
+        if encoding == "bgr8":
+            img_msg.encoding = "bgr8"
+            img_msg.is_bigendian = 0
+            img_msg.step = img_msg.width * 3  # 3 bytes per pixel (BGR)
+            img_msg.data = cv_image.tobytes()
+        elif encoding == "rgb8":
+            img_msg.encoding = "rgb8"
+            img_msg.is_bigendian = 0
+            img_msg.step = img_msg.width * 3
+            img_msg.data = cv_image.tobytes()
+        else:
+            raise ValueError(f"Encoding {encoding} chưa được hỗ trợ")
+        
+        return img_msg
     
     def timer_callback(self):
         ret, frame = self.cap.read()
         if ret:
             try:
-                # Convert OpenCV image sang ROS2 Image message
-                ros_image = self.bridge.cv2_to_imgmsg(frame, "bgr8")
+                # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
+                ros_image = self.cv2_to_imgmsg(frame, "bgr8")
                 ros_image.header.stamp = self.get_clock().now().to_msg()
                 ros_image.header.frame_id = self.frame_id
                 
