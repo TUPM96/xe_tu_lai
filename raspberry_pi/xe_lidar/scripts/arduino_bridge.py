@@ -39,12 +39,18 @@ class ArduinoBridge(Node):
         timeout = self.get_parameter('timeout').value
         auto_detect = self.get_parameter('auto_detect').value
         
-        # Tự động tìm Arduino nếu được bật
+        # Tự động tìm Arduino chỉ nếu được bật VÀ port được chỉ định không tồn tại
         if auto_detect:
-            detected_port = self.detect_arduino_port()
-            if detected_port:
-                serial_port = detected_port
-                self.get_logger().info(f'Tự động phát hiện Arduino tại: {serial_port}')
+            import os
+            if not os.path.exists(serial_port):
+                # Port được chỉ định không tồn tại, thử auto-detect
+                detected_port = self.detect_arduino_port()
+                if detected_port:
+                    serial_port = detected_port
+                    self.get_logger().info(f'Port được chỉ định không tồn tại. Tự động phát hiện Arduino tại: {serial_port}')
+            else:
+                # Port được chỉ định tồn tại, dùng port đó
+                self.get_logger().info(f'Sử dụng port được chỉ định: {serial_port}')
         
         # Khởi tạo Serial connection
         self.serial_conn = None
@@ -107,24 +113,37 @@ class ArduinoBridge(Node):
     
     def detect_arduino_port(self):
         """Tự động phát hiện cổng Serial của Arduino"""
-        ports = serial.tools.list_ports.comports()
+        import os
         
-        # Tìm các cổng có thể là Arduino
+        # Ưu tiên ttyACM (Arduino thường dùng ttyACM, LiDAR thường dùng ttyUSB)
+        # Kiểm tra ttyACM trước
+        for port_name in ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2']:
+            if os.path.exists(port_name):
+                try:
+                    test_serial = serial.Serial(port_name, timeout=0.1)
+                    test_serial.close()
+                    return port_name
+                except:
+                    continue
+        
+        # Tìm các cổng có thể là Arduino qua description
+        ports = serial.tools.list_ports.comports()
         for port in ports:
-            # Arduino thường có description chứa "Arduino" hoặc "USB"
+            # Arduino thường có description chứa "Arduino", "CH340", "CH341", "CP210"
             desc = port.description.lower()
-            if 'arduino' in desc or 'ch340' in desc or 'ch341' in desc or 'cp210' in desc:
+            # Ưu tiên ttyACM hơn ttyUSB
+            if port.device.startswith('/dev/ttyACM') and ('arduino' in desc or 'ch340' in desc or 'ch341' in desc or 'cp210' in desc):
                 return port.device
         
-        # Nếu không tìm thấy, thử các cổng phổ biến
-        common_ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0', '/dev/ttyUSB1']
-        for port_name in common_ports:
-            try:
-                test_serial = serial.Serial(port_name, timeout=0.1)
-                test_serial.close()
-                return port_name
-            except:
-                continue
+        # Cuối cùng mới thử ttyUSB (thường là LiDAR hoặc thiết bị khác)
+        for port_name in ['/dev/ttyUSB0', '/dev/ttyUSB1']:
+            if os.path.exists(port_name):
+                try:
+                    test_serial = serial.Serial(port_name, timeout=0.1)
+                    test_serial.close()
+                    return port_name
+                except:
+                    continue
         
         return None
     

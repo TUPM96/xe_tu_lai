@@ -1,13 +1,30 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     package_name = 'xe_lidar'
+    
+    # Robot State Publisher (RSP) để visualize khung xe
+    print("📡 Robot State Publisher (RSP) - Ackermann 4 bánh")
+    rsp = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            os.path.join(
+                get_package_share_directory(package_name),
+                'launch',
+                'rsp_ackermann.launch.py'
+            )
+        ]),
+        launch_arguments={
+            'use_sim_time': 'false',
+            'use_ros2_control': 'false'  # Không dùng ros2_control khi dùng Arduino
+        }.items()
+    )
     
     # Launch arguments
     serial_port_arg = DeclareLaunchArgument(
@@ -25,10 +42,11 @@ def generate_launch_description():
     auto_detect_arg = DeclareLaunchArgument(
         'auto_detect',
         default_value='true',
-        description='Tự động phát hiện cổng Arduino (true/false)'
+        description='Tự động phát hiện cổng Arduino nếu port được chỉ định không tồn tại (true/false). Nếu chỉ định port cụ thể, sẽ ưu tiên dùng port đó.'
     )
     
     # Arduino Bridge Node
+    print("🔌 Arduino Bridge Node")
     arduino_bridge_node = Node(
         package=package_name,
         executable='arduino_bridge.py',
@@ -45,6 +63,7 @@ def generate_launch_description():
         serial_port_arg,
         baudrate_arg,
         auto_detect_arg,
+        rsp,
         arduino_bridge_node,
     ])
 

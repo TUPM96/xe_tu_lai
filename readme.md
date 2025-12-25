@@ -130,23 +130,54 @@ sudo chmod 666 /dev/video0   # Camera
 
 ```bash
 # Gỡ VNC nếu đã cài (nếu có)
+# 1. Kill các VNC server đang chạy
 vncserver -kill :1 2>/dev/null
+vncserver -kill :2 2>/dev/null
+pkill -9 vncserver 2>/dev/null
+
+# 2. Dừng và tắt systemd services
 sudo systemctl stop vncserver@1.service 2>/dev/null
+sudo systemctl stop vncserver@2.service 2>/dev/null
 sudo systemctl disable vncserver@1.service 2>/dev/null
+sudo systemctl disable vncserver@2.service 2>/dev/null
 sudo rm -f /etc/systemd/system/vncserver@.service
 sudo systemctl daemon-reload
-sudo aptitude remove -y tightvncserver 2>/dev/null
 
-# Cài đặt xrdp
-sudo aptitude install -y xrdp
+# 3. Xóa VNC auto-start trong .bashrc, .profile
+# Kiểm tra và xóa dòng có vncserver trong .bashrc
+sed -i '/vncserver/d' ~/.bashrc 2>/dev/null
+sed -i '/vncserver/d' ~/.profile 2>/dev/null
+sed -i '/vncserver/d' ~/.bash_profile 2>/dev/null
 
-# Tạo file .xsession (KHÔNG set LIBGL_ALWAYS_SOFTWARE để tránh conflict với rviz2)
-cat > ~/.xsession << 'EOF'
-#!/bin/bash
-unset DBUS_SESSION_BUS_ADDRESS
-exec /etc/X11/Xsession
-EOF
+# 4. Xóa VNC khỏi autostart (nếu có)
+rm -f ~/.config/autostart/*vnc* 2>/dev/null
+
+# 5. Xóa cron jobs chạy VNC
+crontab -l 2>/dev/null | grep -v vncserver | crontab - 2>/dev/null
+
+# 6. Gỡ package VNC
+sudo apt remove -y tightvncserver tigervnc-* vnc4server x11vnc 2>/dev/null
+sudo apt autoremove -y
+
+# 7. Xóa thư mục VNC config (tùy chọn)
+# rm -rf ~/.vnc
+
+# Cài đặt xrdp và desktop environment (XFCE - nhẹ, phù hợp Raspberry Pi)
+sudo aptitude install -y xrdp xfce4 xfce4-goodies
+
+# Tạo file .xsession để xrdp chạy XFCE desktop
+echo "xfce4-session" > ~/.xsession
 chmod +x ~/.xsession
+
+# Hoặc nếu muốn dùng desktop mặc định của hệ thống:
+# cat > ~/.xsession << 'EOF'
+# #!/bin/bash
+# unset DBUS_SESSION_BUS_ADDRESS
+# if [ -f /etc/X11/Xsession ]; then
+#     exec /etc/X11/Xsession
+# fi
+# EOF
+# chmod +x ~/.xsession
 
 # Restart xrdp
 sudo systemctl restart xrdp
@@ -167,6 +198,316 @@ sudo netstat -tlnp | grep 3389
 - Dùng Remote Desktop Connection (Windows) hoặc Remmina (Linux)
 - Port: `3389` (mặc định)
 - Khi connect, chọn session: **"Xorg"** (không phải "Xvnc")
+- Username: tên user của bạn
+- Password: password của bạn
+
+**Nếu gặp màn hình xanh (không có desktop) khi kết nối xrdp:**
+```bash
+# 1. Kiểm tra desktop environment đã cài chưa
+ls /usr/share/xsessions/
+# Phải thấy có file như: xfce.desktop, xfce4.desktop, etc.
+
+# 2. Nếu chưa có XFCE, cài đặt:
+sudo apt update
+sudo apt install -y xfce4 xfce4-goodies
+
+# 3. Đảm bảo file .xsession đúng:
+cat ~/.xsession
+# Phải có: xfce4-session
+
+# 4. Nếu chưa đúng hoặc file không tồn tại, tạo lại:
+echo "xfce4-session" > ~/.xsession
+chmod +x ~/.xsession
+
+# 5. Kiểm tra file có quyền thực thi
+ls -la ~/.xsession
+
+# 6. Thêm xrdp vào group ssl-cert (nếu cần)
+sudo adduser xrdp ssl-cert
+
+# 7. Restart xrdp
+sudo systemctl restart xrdp
+
+# 8. Kiểm tra xrdp đang chạy
+sudo systemctl status xrdp
+
+# 9. Kiểm tra log để xem lỗi (nếu vẫn không được)
+sudo tail -50 /var/log/xrdp-sesman.log
+sudo tail -50 /var/log/xrdp.log
+
+# 10. Nếu gặp lỗi "X server failed to start" hoặc "Timed out waiting for X server":
+# Kiểm tra đã cài xorgxrdp chưa (QUAN TRỌNG!)
+dpkg -l | grep xorgxrdp
+
+# Nếu chưa có, cài đặt xorgxrdp:
+sudo apt update
+sudo apt install -y xorgxrdp
+
+# Kiểm tra xorgxrdp config:
+ls -la /etc/xrdp/xorg.conf
+# Nếu không có file, thử:
+sudo find /usr -name "xorg.conf" 2>/dev/null
+
+# 11. Kiểm tra log X server để xem lỗi chi tiết:
+ls -lt ~/.xorgxrdp.*.log | head -1
+cat $(ls -t ~/.xorgxrdp.*.log | head -1) | tail -100
+
+# 12. Nếu X server vẫn không khởi động, kiểm tra log X server chi tiết:
+# Tìm file log mới nhất (sau khi đã kết nối và bị lỗi)
+ls -lt ~/.xorgxrdp.*.log 2>/dev/null | head -1
+
+# Xem log X server để tìm lỗi cụ thể
+cat $(ls -t ~/.xorgxrdp.*.log 2>/dev/null | head -1) 2>/dev/null | tail -100
+
+# Hoặc xem tất cả log X server
+cat ~/.xorgxrdp.*.log 2>/dev/null | grep -i error | tail -20
+
+# 13. Nếu log cho thấy thiếu driver hoặc module, cài thêm packages:
+sudo apt install -y xserver-xorg-core xserver-xorg-input-all xserver-xorg-video-dummy
+
+# 14. Nếu vẫn lỗi, thử tạo xorg.conf manually:
+sudo mkdir -p /etc/xrdp
+sudo nano /etc/xrdp/xorg.conf
+# Paste nội dung xorg.conf cơ bản (xem bên dưới)
+
+# 15. Nếu log X server cho thấy lỗi "Cannot open /dev/tty0 (Permission denied)":
+# Tạo file xorg.conf để bỏ qua /dev/tty0:
+sudo mkdir -p /etc/xrdp
+sudo tee /etc/xrdp/xorg.conf > /dev/null << 'EOF'
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "DontZap" "true"
+    Option "AllowMouseOpenFail" "true"
+    Option "AutoAddDevices" "true"
+    Option "AutoEnableDevices" "true"
+EndSection
+
+Section "ServerLayout"
+    Identifier "XServer0"
+    Screen "Screen0" 0 0
+EndSection
+
+Section "Monitor"
+    Identifier "Monitor0"
+    HorizSync 28.0-80.0
+    VertRefresh 48.0-75.0
+    Modeline "1920x1080_60.00" 173.00 1920 2048 2248 2576 1080 1083 1088 1120 -hsync +vsync
+EndSection
+
+Section "Device"
+    Identifier "Device0"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "Device0"
+    Monitor "Monitor0"
+    DefaultDepth 24
+    SubSection "Display"
+        Depth 24
+        Modes "1920x1080"
+    EndSubSection
+EndSection
+EOF
+
+# 16. Nếu log vẫn báo "Unable to locate/open config file: xrdp/xorg.conf":
+# Xrdp tìm file ở ~/.config/xrdp/xorg.conf hoặc /etc/xrdp/xorg.conf
+# Kiểm tra xrdp tìm ở đâu:
+sudo grep -r "xorg.conf" /etc/xrdp/ 2>/dev/null
+
+# Tạo file ở cả 2 nơi để chắc chắn:
+sudo mkdir -p /etc/xrdp
+sudo mkdir -p ~/.config/xrdp
+
+# Copy file config vào cả 2 nơi
+sudo cp /etc/xrdp/xorg.conf ~/.config/xrdp/xorg.conf 2>/dev/null || true
+sudo cp ~/.config/xrdp/xorg.conf /etc/xrdp/xorg.conf 2>/dev/null || true
+
+# 17. Nếu vẫn lỗi "Cannot open virtual console", tạo xorg.conf với DontVTSwitch:
+sudo tee /etc/xrdp/xorg.conf > /dev/null << 'EOF'
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "DontZap" "true"
+    Option "DontZoom" "true"
+    Option "AllowMouseOpenFail" "true"
+    Option "AutoAddDevices" "true"
+    Option "AutoEnableDevices" "true"
+    Option "UseDefaultFontPath" "true"
+EndSection
+
+Section "ServerLayout"
+    Identifier "XServer0"
+    Screen "Screen0" 0 0
+    Option "AutoAddDevices" "true"
+    Option "AutoEnableDevices" "true"
+EndSection
+
+Section "Monitor"
+    Identifier "Monitor0"
+    HorizSync 28.0-80.0
+    VertRefresh 48.0-75.0
+EndSection
+
+Section "Device"
+    Identifier "Device0"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+    Option "ShadowFB" "true"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "Device0"
+    Monitor "Monitor0"
+    DefaultDepth 24
+    SubSection "Display"
+        Depth 24
+        Virtual 1920 1080
+    EndSubSection
+EndSection
+EOF
+
+# Copy vào home directory cũng
+cp /etc/xrdp/xorg.conf ~/.config/xrdp/xorg.conf
+chmod 644 /etc/xrdp/xorg.conf
+chmod 644 ~/.config/xrdp/xorg.conf
+
+# 19. QUAN TRỌNG: Kiểm tra xrdp tìm xorg.conf ở đâu:
+sudo grep -r "xorg.conf" /etc/xrdp/ 2>/dev/null
+# Nếu thấy "param=xrdp/xorg.conf", có nghĩa là xrdp tìm file ở đường dẫn tương đối
+# File cần được tạo ở: ~/xrdp/xorg.conf (trong home directory)
+
+# 20. Tạo file xorg.conf ở đúng chỗ (trong thư mục xrdp trong home):
+mkdir -p ~/xrdp
+cp /etc/xrdp/xorg.conf ~/xrdp/xorg.conf 2>/dev/null || \
+sudo tee ~/xrdp/xorg.conf > /dev/null << 'EOF'
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "DontZap" "true"
+    Option "DontZoom" "true"
+    Option "AllowMouseOpenFail" "true"
+    Option "AutoAddDevices" "true"
+    Option "AutoEnableDevices" "true"
+EndSection
+
+Section "ServerLayout"
+    Identifier "XServer0"
+    Screen "Screen0" 0 0
+EndSection
+
+Section "Monitor"
+    Identifier "Monitor0"
+    HorizSync 28.0-80.0
+    VertRefresh 48.0-75.0
+EndSection
+
+Section "Device"
+    Identifier "Device0"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+    Option "ShadowFB" "true"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "Device0"
+    Monitor "Monitor0"
+    DefaultDepth 24
+    SubSection "Display"
+        Depth 24
+        Virtual 1920 1080
+    EndSubSection
+EndSection
+EOF
+
+chmod 644 ~/xrdp/xorg.conf
+ls -la ~/xrdp/xorg.conf
+
+# 22. Nếu log cho thấy "Using config file: xrdp/xorg.conf" nhưng vẫn lỗi virtual console:
+# Kiểm tra file config đã có DontVTSwitch chưa:
+grep -i "DontVTSwitch" ~/xrdp/xorg.conf
+
+# Nếu không có hoặc không đúng, sửa lại file:
+cat > ~/xrdp/xorg.conf << 'EOF'
+Section "ServerFlags"
+    Option "DontVTSwitch" "true"
+    Option "DontZap" "true"
+    Option "DontZoom" "true"
+    Option "AllowMouseOpenFail" "true"
+    Option "AutoAddDevices" "true"
+    Option "AutoEnableDevices" "true"
+EndSection
+
+Section "ServerLayout"
+    Identifier "XServer0"
+    Screen "Screen0" 0 0
+EndSection
+
+Section "Monitor"
+    Identifier "Monitor0"
+    HorizSync 28.0-80.0
+    VertRefresh 48.0-75.0
+EndSection
+
+Section "Device"
+    Identifier "Device0"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+    Option "ShadowFB" "true"
+EndSection
+
+Section "Screen"
+    Identifier "Screen0"
+    Device "Device0"
+    Monitor "Monitor0"
+    DefaultDepth 24
+    SubSection "Display"
+        Depth 24
+        Virtual 1920 1080
+    EndSubSection
+EndSection
+EOF
+
+chmod 644 ~/xrdp/xorg.conf
+
+# 23. Hoặc thử thêm user vào group (nhưng thường không cần nếu đã có DontVTSwitch):
+sudo usermod -a -G video $USER
+sudo usermod -a -G tty $USER
+
+# 17. Restart xrdp và test lại:
+sudo systemctl restart xrdp
+
+# 18. Debug: Xem log chi tiết để tìm lỗi:
+# Xem log xrdp-sesman (log chính):
+sudo tail -100 /var/log/xrdp-sesman.log
+
+# Xem log xrdp:
+sudo tail -100 /var/log/xrdp.log
+
+# Xem log X server (sau khi kết nối và bị lỗi):
+cat $(ls -t ~/.xorgxrdp.*.log 2>/dev/null | head -1) 2>/dev/null
+
+# Xem chỉ các dòng ERROR:
+grep -i "EE\|ERROR\|Fatal" ~/.xorgxrdp.*.log 2>/dev/null
+
+# Xem log real-time khi kết nối (chạy trước khi kết nối):
+# Terminal 1:
+sudo tail -f /var/log/xrdp-sesman.log
+
+# Terminal 2:
+tail -f ~/.xorgxrdp.*.log 2>/dev/null
+
+# Xem tất cả log liên quan đến xrdp:
+sudo journalctl -u xrdp -n 100 --no-pager
+sudo journalctl -u xrdp-sesman -n 100 --no-pager
+```
+
+**Lưu ý khi kết nối xrdp:**
+- Khi login, ở màn hình chọn session, chọn **"Xorg"** (KHÔNG chọn "Xvnc")
+- Nếu không thấy menu chọn session, thử logout và login lại
+- Đảm bảo username và password đúng
 
 ---
 
