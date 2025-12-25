@@ -43,6 +43,7 @@ install(
 install(PROGRAMS
   scripts/obstacle_avoidance.py
   scripts/arduino_bridge.py
+  scripts/camera_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -50,6 +51,7 @@ install(PROGRAMS
 install(PROGRAMS
   scripts/obstacle_avoidance.py
   scripts/arduino_bridge.py
+  scripts/camera_node.py
   DESTINATION libexec/${PROJECT_NAME}
 )
 

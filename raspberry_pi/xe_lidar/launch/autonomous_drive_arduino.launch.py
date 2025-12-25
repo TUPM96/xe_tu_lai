@@ -69,16 +69,16 @@ def generate_launch_description():
     )
     
     camera_node = Node(
-        package='v4l2_camera',
-        executable='v4l2_camera_node',
+        package='xe_lidar',
+        executable='camera_node.py',
         name='camera_node',
         output='screen',
-        namespace='camera',
         parameters=[{
             'video_device': LaunchConfiguration('video_device'),
-            'image_size': [640, 480],
-            'time_per_frame': [1, 6],
-            'camera_frame_id': 'camera_link_optical'
+            'width': 640,
+            'height': 480,
+            'fps': 30,
+            'frame_id': 'camera_link_optical'
         }]
     )
     
