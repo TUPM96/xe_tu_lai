@@ -145,7 +145,11 @@ pip3 install pyserial
 sudo aptitude install -y \
     ros-jazzy-cv-bridge \
     ros-jazzy-v4l2-camera \
-    ros-jazzy-ackermann-msgs
+    ros-jazzy-ackermann-msgs \
+    ros-jazzy-twist-mux \
+    ros-jazzy-controller-manager \
+    ros-jazzy-xacro \
+    ros-jazzy-robot-state-publisher
 
 # 4. Build workspace
 cd ~/ros2_ws

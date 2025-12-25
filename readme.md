@@ -191,10 +191,13 @@ cd ~/ros2_ws
 sudo aptitude install -y \
     ros-jazzy-cv-bridge \
     ros-jazzy-v4l2-camera \
+    ros-jazzy-twist-mux \
+    ros-jazzy-controller-manager \
     ros-jazzy-gazebo-ros-pkgs \
     ros-jazzy-gazebo-ros \
     ros-jazzy-ackermann-msgs \
     ros-jazzy-xacro \
+    ros-jazzy-robot-state-publisher \
     python3-opencv \
     python3-numpy \
     python3-pip \
