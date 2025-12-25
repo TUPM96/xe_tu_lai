@@ -1,7 +1,7 @@
 # Hệ Thống Xe Tự Lái 4 Bánh - Ackermann Steering
 
 > **Hệ thống xe tự lái thông minh sử dụng Ackermann Steering (4 bánh lái như ô tô thật)**
-> Kết hợp **Camera** (lane following) và **LiDAR** (obstacle avoidance) với ROS2 Humble
+> Kết hợp **Camera** (lane following) và **LiDAR** (obstacle avoidance) với ROS2 Jazzy
 
 **Repository**: [https://github.com/TUPM96/xe_tu_lai](https://github.com/TUPM96/xe_tu_lai)
 
@@ -100,11 +100,11 @@ cmd.angular.z = max(-max_angular_for_ackermann,
 ## 📋 Yêu cầu hệ thống
 
 ### Hệ điều hành
-- **Ubuntu 22.04 LTS** (khuyến nghị mạnh mẽ)
-- Ubuntu 20.04 với ROS2 Foxy (cần điều chỉnh)
+- **Ubuntu 24.04 LTS** (khuyến nghị mạnh mẽ)
+- Ubuntu 22.04 với ROS2 Humble (cần điều chỉnh - không khuyến nghị)
 
 ### Phần mềm
-- **ROS2 Humble Hawksbill** (bắt buộc)
+- **ROS2 Jazzy Jalisco** (bắt buộc)
 - Python 3.10+
 - OpenCV (`python3-opencv`)
 - NumPy (`numpy<2.0` - quan trọng!)
@@ -131,30 +131,33 @@ cmd.angular.z = max(-max_angular_for_ackermann,
 
 ## 🚀 Cài đặt
 
-### Bước 1: Cài đặt ROS2 Humble
+### Bước 1: Cài đặt ROS2 Jazzy
 
 ```bash
+# Cài đặt aptitude (nếu chưa có)
+sudo apt install -y aptitude
+
 # Cập nhật hệ thống
-sudo apt update && sudo apt upgrade -y
+sudo aptitude update && sudo aptitude full-upgrade -y
 
 # Cài đặt locale
-sudo apt install -y locales
+sudo aptitude install -y locales
 sudo locale-gen en_US en_US.UTF-8
 sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 # Thêm ROS2 repository
-sudo apt install -y software-properties-common curl gnupg lsb-release
+sudo aptitude install -y software-properties-common curl gnupg lsb-release
 sudo add-apt-repository universe
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
 sudo sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2-latest.list'
 
-# Cài đặt ROS2 Humble Desktop
-sudo apt update
-sudo apt install -y ros-humble-desktop
+# Cài đặt ROS2 Jazzy Desktop
+sudo aptitude update
+sudo aptitude install -y ros-jazzy-desktop
 
 # Cài đặt development tools
-sudo apt install -y \
+sudo aptitude install -y \
     python3-argcomplete \
     python3-colcon-common-extensions \
     python3-rosdep \
@@ -165,7 +168,7 @@ sudo rosdep init
 rosdep update
 
 # Setup environment
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -185,13 +188,13 @@ cd ~/ros2_ws
 
 ```bash
 # Dependencies cho xe tự lái
-sudo apt install -y \
-    ros-humble-cv-bridge \
-    ros-humble-v4l2-camera \
-    ros-humble-gazebo-ros-pkgs \
-    ros-humble-gazebo-ros \
-    ros-humble-ackermann-msgs \
-    ros-humble-xacro \
+sudo aptitude install -y \
+    ros-jazzy-cv-bridge \
+    ros-jazzy-v4l2-camera \
+    ros-jazzy-gazebo-ros-pkgs \
+    ros-jazzy-gazebo-ros \
+    ros-jazzy-ackermann-msgs \
+    ros-jazzy-xacro \
     python3-opencv \
     python3-numpy \
     python3-pip \
@@ -209,7 +212,7 @@ rosdep install --from-paths src --ignore-src -r -y
 
 ```bash
 cd ~/ros2_ws/src
-git clone https://github.com/ros-controls/ros2_controllers.git -b humble
+git clone https://github.com/ros-controls/ros2_controllers.git -b jazzy
 
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
@@ -320,7 +323,7 @@ ros2 run xe_lidar obstacle_avoidance.py
 
 ```bash
 # Cài đặt teleop (nếu chưa có)
-sudo apt install ros-humble-teleop-twist-keyboard
+sudo aptitude install -y ros-jazzy-teleop-twist-keyboard
 
 # Chạy
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
@@ -424,7 +427,7 @@ rviz2
 
 ```bash
 # Cài đặt image view (nếu chưa có)
-sudo apt install ros-humble-rqt-image-view
+sudo aptitude install -y ros-jazzy-rqt-image-view
 
 # Xem camera
 ros2 run rqt_image_view rqt_image_view /camera/image_raw
@@ -527,7 +530,7 @@ ros2 control list_controllers
 ```bash
 # Cài đặt từ source (xem Bước 4)
 cd ~/ros2_ws/src
-git clone https://github.com/ros-controls/ros2_controllers.git -b humble
+git clone https://github.com/ros-controls/ros2_controllers.git -b jazzy
 cd ~/ros2_ws
 colcon build --packages-select ackermann_steering_controller
 source install/setup.bash
@@ -720,8 +723,8 @@ def control_loop():
 ## 📚 Tài liệu tham khảo
 
 ### ROS2 Documentation
-- [ROS2 Humble](https://docs.ros.org/en/humble/)
-- [Ackermann Steering Controller](https://control.ros.org/humble/doc/ros2_controllers/ackermann_steering_controller/doc/userdoc.html)
+- [ROS2 Jazzy](https://docs.ros.org/en/jazzy/)
+- [Ackermann Steering Controller](https://control.ros.org/jazzy/doc/ros2_controllers/ackermann_steering_controller/doc/userdoc.html)
 - [Gazebo ROS2 Integration](https://github.com/ros-simulation/gazebo_ros_pkgs)
 
 ### Ackermann Steering
@@ -767,7 +770,7 @@ Khi báo lỗi, vui lòng cung cấp:
 
 ## ✅ Checklist trước khi chạy
 
-- [ ] Ubuntu 22.04 + ROS2 Humble đã cài đặt
+- [ ] Ubuntu 24.04 + ROS2 Jazzy đã cài đặt
 - [ ] Workspace đã build: `colcon build --symlink-install`
 - [ ] Đã source: `source install/setup.bash`
 - [ ] NumPy < 2.0: `pip3 list | grep numpy`

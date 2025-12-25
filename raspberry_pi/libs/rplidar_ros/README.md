@@ -28,6 +28,7 @@ SLAMTEC LIDAR Tutorial: <https://github.com/robopeak/rplidar_ros/wiki>
 
 ## How to install ROS2
 
+[jazzy](https://docs.ros.org/en/jazzy/Installation.html),
 [rolling](https://docs.ros.org/en/rolling/Installation.html),
 [humble](https://docs.ros.org/en/humble/Installation.html),
 [galactic](https://docs.ros.org/en/galactic/Installation.html),

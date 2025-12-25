@@ -18,11 +18,14 @@ Hướng dẫn chi tiết để chạy hệ thống xe tự lái bằng Python t
 ### Bước 1: Cài đặt dependencies
 
 ```bash
+# Cài đặt aptitude (nếu chưa có)
+sudo apt install -y aptitude
+
 # Cập nhật hệ thống
-sudo apt update && sudo apt upgrade -y
+sudo aptitude update && sudo aptitude full-upgrade -y
 
 # Cài đặt Python packages
-sudo apt install -y \
+sudo aptitude install -y \
     python3 \
     python3-pip \
     python3-opencv \

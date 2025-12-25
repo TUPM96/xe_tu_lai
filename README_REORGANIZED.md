@@ -128,8 +128,11 @@ xe_tu_lai/
 
 ```bash
 # 1. Cài đặt dependencies cơ bản
-sudo apt update
-sudo apt install -y \
+# Cài đặt aptitude (nếu chưa có)
+sudo apt install -y aptitude
+
+sudo aptitude update
+sudo aptitude install -y \
     python3-opencv \
     python3-numpy \
     python3-pip \
@@ -139,10 +142,10 @@ sudo apt install -y \
 pip3 install pyserial
 
 # 3. Cài đặt ROS2 dependencies (nếu chưa có ROS2)
-sudo apt install -y \
-    ros-humble-cv-bridge \
-    ros-humble-v4l2-camera \
-    ros-humble-ackermann-msgs
+sudo aptitude install -y \
+    ros-jazzy-cv-bridge \
+    ros-jazzy-v4l2-camera \
+    ros-jazzy-ackermann-msgs
 
 # 4. Build workspace
 cd ~/ros2_ws
@@ -563,7 +566,7 @@ ros2 node list
 ## 📚 Tài liệu tham khảo
 
 - **Arduino**: Xem `arduino/README.md` để biết chi tiết về code Arduino
-- **ROS2**: [ROS2 Documentation](https://docs.ros.org/en/humble/)
+- **ROS2**: [ROS2 Documentation](https://docs.ros.org/en/jazzy/)
 - **RPLIDAR**: [rplidar_ros](https://github.com/Slamtec/rplidar_ros)
 
 ## 🎯 Tóm tắt lệnh nhanh

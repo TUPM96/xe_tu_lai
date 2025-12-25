@@ -16,14 +16,14 @@ Hệ thống xe tự lái sử dụng **Camera** và **LiDAR** để phát hiệ
 
 ```bash
 # Dependencies cơ bản
-sudo apt install -y ros-$ROS_DISTRO-cv-bridge \
-                    ros-$ROS_DISTRO-v4l2-camera \
+sudo aptitude install -y ros-jazzy-cv-bridge \
+                    ros-jazzy-v4l2-camera \
                     python3-opencv \
                     python3-numpy
 
 # Dependencies cho simulation (nếu chạy mô phỏng)
-sudo apt install -y ros-$ROS_DISTRO-gazebo-ros-pkgs \
-                    ros-$ROS_DISTRO-gazebo-ros \
+sudo aptitude install -y ros-jazzy-gazebo-ros-pkgs \
+                    ros-jazzy-gazebo-ros \
                     gazebo
 ```
 
