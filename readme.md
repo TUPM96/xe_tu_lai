@@ -55,6 +55,10 @@ rosdep update
 
 # Setup environment
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+
+# Fix rviz2 trên Raspberry Pi (software rendering)
+echo "export LIBGL_ALWAYS_SOFTWARE=1" >> ~/.bashrc
+
 source ~/.bashrc
 ```
 
@@ -328,13 +332,69 @@ ros2 node list
 ### Visualize với RViz2
 
 ```bash
+# Đã được set trong .bashrc khi cài đặt (LIBGL_ALWAYS_SOFTWARE=1)
 rviz2
 ```
 
-Thêm các components:
-- **LaserScan**: Topic `/scan`
-- **Image**: Topic `/camera/image_raw`
-- **TF**: Xem coordinate frames
+**Cấu hình quan trọng:**
+
+1. **Fixed Frame**: Đặt thành `base_link` hoặc `world` (KHÔNG phải `map` hay `odom`!)
+   - Displays → Global Options → Fixed Frame: `base_link` (nếu đã chạy launch file)
+   - Hoặc `world` (frame mặc định, luôn có sẵn)
+   - Hoặc `laser_frame` (nếu chỉ test LiDAR, chưa chạy launch file)
+   - **Lưu ý**: Nếu Grid bị cắt/xé, đổi Fixed Frame sang `world` hoặc `base_link`
+
+2. **Thêm LaserScan Display**:
+   - Click "Add" → chọn "LaserScan"
+   - Topic: `/scan`
+   - Color Transformer: `Intensity` hoặc `FlatColor`
+   - Size (m): `0.05` (hoặc lớn hơn để dễ thấy)
+
+3. **Thêm TF Display** (để thấy frames):
+   - Click "Add" → chọn "TF"
+   - Sẽ thấy `base_link` và `laser_frame`
+
+4. **Thay đổi View** (QUAN TRỌNG - nếu chỉ thấy đường thẳng):
+   - Views → Current View → Type: đổi từ `TopDownOrtho` → `Orbit` hoặc `XYOrbit`
+   - **Lý do**: `TopDownOrtho` nhìn từ trên xuống, 2D LiDAR scan sẽ chỉ là đường thẳng mỏng
+   - Sau khi đổi, dùng chuột:
+     - **Giữ chuột giữa + kéo**: Xoay view
+     - **Scroll**: Zoom in/out
+     - **Giữ Shift + chuột giữa + kéo**: Di chuyển view
+   - Hoặc click vào "Focus Camera" tool trên toolbar rồi click vào điểm scan
+
+5. **Thêm Image Display** (nếu có camera):
+   - Click "Add" → chọn "Image"
+   - Topic: `/camera/image_raw`
+
+**Nếu vẫn không thấy gì sau khi đổi view:**
+
+1. **Tăng kích thước điểm LaserScan**:
+   - Displays → LaserScan → Size (m): tăng lên `0.1` hoặc `0.2`
+   - Size (Pixels): tăng lên `5` hoặc `10`
+
+2. **Đổi Color Transformer**:
+   - Displays → LaserScan → Color Transformer: đổi sang `FlatColor`
+   - Color: chọn màu sáng (ví dụ: `255; 0; 0` cho đỏ)
+
+3. **Kiểm tra dữ liệu có đang publish không**:
+   ```bash
+   ros2 topic echo /scan --once
+   ```
+   Phải thấy dữ liệu ranges, angles, etc.
+
+4. **Kiểm tra transform**:
+   ```bash
+   ros2 run tf2_ros tf2_echo base_link laser_frame
+   ```
+   Phải thấy transform, nếu không thì static transform publisher chưa chạy.
+
+5. **Thử view khác**:
+   - Views → Add → Type: `XYOrbit` hoặc `FPS`
+   - Sau đó dùng chuột để xoay và zoom
+
+6. **Reset view**:
+   - Views → Current View → click "Reset" hoặc dùng "Focus Camera" tool
 
 ---
 
@@ -450,6 +510,7 @@ ros2 run tf2_ros static_transform_publisher 0 0 0.2 0 0 0 base_link laser_frame
 ros2 topic echo /scan --once
 ```
 
+
 ### Arduino không nhận lệnh
 
 **Lỗi: executable 'arduino_bridge.py' not found**
@@ -518,6 +579,4 @@ ros2 node list | grep arduino
 - [ ] Quyền truy cập serial/video: `groups $USER`
 
 ---
-
-**Chúc bạn thành công! 🚗💨**
 
