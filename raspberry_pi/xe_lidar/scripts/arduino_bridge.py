@@ -10,11 +10,15 @@ Node này:
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Quaternion
+from nav_msgs.msg import Odometry
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
 import serial
 import serial.tools.list_ports
 import sys
 import time
+import math
 
 
 class ArduinoBridge(Node):
@@ -26,6 +30,9 @@ class ArduinoBridge(Node):
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('timeout', 1.0)
         self.declare_parameter('auto_detect', True)  # Tự động tìm Arduino
+        self.declare_parameter('odom_frame_id', 'odom')
+        self.declare_parameter('base_frame_id', 'base_link')
+        self.declare_parameter('publish_odom', True)  # Bật/tắt publish odometry
         
         serial_port = self.get_parameter('serial_port').value
         baudrate = self.get_parameter('baudrate').value
@@ -70,13 +77,30 @@ class ArduinoBridge(Node):
         )
         self.get_logger().info('Đã subscribe topic /cmd_vel')
         
+        # Parameters cho odometry
+        self.odom_frame_id = self.get_parameter('odom_frame_id').value
+        self.base_frame_id = self.get_parameter('base_frame_id').value
+        self.publish_odom = self.get_parameter('publish_odom').value
+        
+        # Odometry publisher và transform broadcaster
+        if self.publish_odom:
+            self.odom_publisher = self.create_publisher(Odometry, '/odom', 10)
+            self.tf_broadcaster = TransformBroadcaster(self)
+            self.get_logger().info('Đã tạo Odometry publisher và TF broadcaster')
+        
+        # Biến cho odometry (dead reckoning từ cmd_vel)
+        self.x = 0.0  # Vị trí x (m)
+        self.y = 0.0  # Vị trí y (m)
+        self.theta = 0.0  # Góc quay (rad)
+        self.last_odom_time = self.get_clock().now()
+        
         # Biến lưu giá trị hiện tại
         self.last_cmd_time = time.time()
         self.last_linear = 0.0
         self.last_angular = 0.0
         self.timeout_sent = False  # Flag để tránh gửi lệnh dừng liên tục
         
-        # Timer để kiểm tra timeout và gửi lệnh dừng nếu cần
+        # Timer để kiểm tra timeout, gửi lệnh dừng, và publish odometry
         self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
         
         self.get_logger().info('Arduino Bridge Node đã khởi động!')
@@ -169,7 +193,7 @@ class ArduinoBridge(Node):
             self.get_logger().error(f'Không thể kết nối lại: {str(e)}')
     
     def timer_callback(self):
-        """Timer callback để xử lý timeout"""
+        """Timer callback để xử lý timeout và publish odometry"""
         current_time = time.time()
         
         # Nếu không nhận được lệnh trong 0.5 giây, gửi lệnh dừng
@@ -185,6 +209,101 @@ class ArduinoBridge(Node):
         else:
             # Reset flag khi có lệnh mới
             self.timeout_sent = False
+        
+        # Publish odometry từ cmd_vel (dead reckoning)
+        if self.publish_odom:
+            self.update_and_publish_odometry()
+    
+    def update_and_publish_odometry(self):
+        """Tính toán và publish odometry từ cmd_vel (dead reckoning)"""
+        current_time = self.get_clock().now()
+        dt = (current_time - self.last_odom_time).nanoseconds / 1e9  # Convert to seconds
+        
+        if dt < 0.001:  # Tránh chia cho số quá nhỏ
+            return
+        
+        # Lấy vận tốc hiện tại
+        v = self.last_linear  # linear velocity (m/s)
+        omega = self.last_angular  # angular velocity (rad/s)
+        
+        # Tính toán vị trí mới (dead reckoning)
+        if abs(omega) < 0.001:  # Đi thẳng
+            self.x += v * math.cos(self.theta) * dt
+            self.y += v * math.sin(self.theta) * dt
+        else:  # Đi cong
+            # Bán kính quay
+            radius = v / omega if abs(omega) > 0.001 else 0.0
+            # Góc quay trong dt
+            dtheta = omega * dt
+            # Vị trí mới
+            self.x += radius * (math.sin(self.theta + dtheta) - math.sin(self.theta))
+            self.y += radius * (-math.cos(self.theta + dtheta) + math.cos(self.theta))
+            self.theta += dtheta
+        
+        # Normalize theta về [-pi, pi]
+        self.theta = math.atan2(math.sin(self.theta), math.cos(self.theta))
+        
+        # Tạo Odometry message
+        odom_msg = Odometry()
+        odom_msg.header.stamp = current_time.to_msg()
+        odom_msg.header.frame_id = self.odom_frame_id
+        odom_msg.child_frame_id = self.base_frame_id
+        
+        # Vị trí
+        odom_msg.pose.pose.position.x = self.x
+        odom_msg.pose.pose.position.y = self.y
+        odom_msg.pose.pose.position.z = 0.0
+        
+        # Quaternion từ yaw
+        q = self.euler_to_quaternion(0.0, 0.0, self.theta)
+        odom_msg.pose.pose.orientation = q
+        
+        # Vận tốc
+        odom_msg.twist.twist.linear.x = v
+        odom_msg.twist.twist.linear.y = 0.0
+        odom_msg.twist.twist.angular.z = omega
+        
+        # Covariance (đặt giá trị mặc định - có thể điều chỉnh)
+        odom_msg.pose.covariance[0] = 0.1  # x
+        odom_msg.pose.covariance[7] = 0.1  # y
+        odom_msg.pose.covariance[35] = 0.1  # yaw
+        odom_msg.twist.covariance[0] = 0.1  # vx
+        odom_msg.twist.covariance[35] = 0.1  # vyaw
+        
+        # Publish odometry
+        self.odom_publisher.publish(odom_msg)
+        
+        # Publish transform odom -> base_link
+        t = TransformStamped()
+        t.header.stamp = current_time.to_msg()
+        t.header.frame_id = self.odom_frame_id
+        t.child_frame_id = self.base_frame_id
+        t.transform.translation.x = self.x
+        t.transform.translation.y = self.y
+        t.transform.translation.z = 0.0
+        t.transform.rotation = q
+        
+        self.tf_broadcaster.sendTransform(t)
+        
+        # Cập nhật thời gian
+        self.last_odom_time = current_time
+    
+    def euler_to_quaternion(self, roll, pitch, yaw):
+        """Chuyển đổi Euler angles (roll, pitch, yaw) sang Quaternion"""
+        q = Quaternion()
+        cy = math.cos(yaw * 0.5)
+        sy = math.sin(yaw * 0.5)
+        cp = math.cos(pitch * 0.5)
+        sp = math.sin(pitch * 0.5)
+        cr = math.cos(roll * 0.5)
+        sr = math.sin(roll * 0.5)
+        
+        q.w = cr * cp * cy + sr * sp * sy
+        q.x = sr * cp * cy - cr * sp * sy
+        q.y = cr * sp * cy + sr * cp * sy
+        q.z = cr * cp * sy - sr * sp * cy
+        
+        return q
     
     def destroy_node(self):
         """Cleanup khi node bị hủy"""

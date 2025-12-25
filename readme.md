@@ -56,8 +56,8 @@ rosdep update
 # Setup environment
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 
-# Fix rviz2 trên Raspberry Pi (software rendering)
-echo "export LIBGL_ALWAYS_SOFTWARE=1" >> ~/.bashrc
+# Fix rviz2 trên Raspberry Pi (software rendering) - chỉ cho rviz2, không ảnh hưởng xrdp
+echo 'alias rviz2="LIBGL_ALWAYS_SOFTWARE=1 rviz2"' >> ~/.bashrc
 
 source ~/.bashrc
 ```
@@ -125,6 +125,48 @@ sudo chmod 666 /dev/ttyACM0  # Arduino
 sudo chmod 666 /dev/ttyUSB0  # LiDAR
 sudo chmod 666 /dev/video0   # Camera
 ```
+
+### Bước 4: Cài đặt xrdp (Remote Desktop)
+
+```bash
+# Gỡ VNC nếu đã cài (nếu có)
+vncserver -kill :1 2>/dev/null
+sudo systemctl stop vncserver@1.service 2>/dev/null
+sudo systemctl disable vncserver@1.service 2>/dev/null
+sudo rm -f /etc/systemd/system/vncserver@.service
+sudo systemctl daemon-reload
+sudo aptitude remove -y tightvncserver 2>/dev/null
+
+# Cài đặt xrdp
+sudo aptitude install -y xrdp
+
+# Tạo file .xsession (KHÔNG set LIBGL_ALWAYS_SOFTWARE để tránh conflict với rviz2)
+cat > ~/.xsession << 'EOF'
+#!/bin/bash
+unset DBUS_SESSION_BUS_ADDRESS
+exec /etc/X11/Xsession
+EOF
+chmod +x ~/.xsession
+
+# Restart xrdp
+sudo systemctl restart xrdp
+sudo systemctl enable xrdp
+
+# Mở firewall port cho xrdp (port 3389)
+sudo ufw allow 3389/tcp
+
+# Kiểm tra xrdp đang chạy
+sudo systemctl status xrdp
+
+# Kiểm tra port đã mở
+sudo netstat -tlnp | grep 3389
+```
+
+**Kết nối xrdp:**
+- Địa chỉ: `IP_Raspberry_Pi` (ví dụ: `192.168.137.219`)
+- Dùng Remote Desktop Connection (Windows) hoặc Remmina (Linux)
+- Port: `3389` (mặc định)
+- Khi connect, chọn session: **"Xorg"** (không phải "Xvnc")
 
 ---
 
@@ -332,8 +374,10 @@ ros2 node list
 ### Visualize với RViz2
 
 ```bash
-# Đã được set trong .bashrc khi cài đặt (LIBGL_ALWAYS_SOFTWARE=1)
+# Đã được set alias trong .bashrc (tự động dùng software rendering)
 rviz2
+# Hoặc chạy trực tiếp với software rendering:
+# LIBGL_ALWAYS_SOFTWARE=1 rviz2
 ```
 
 

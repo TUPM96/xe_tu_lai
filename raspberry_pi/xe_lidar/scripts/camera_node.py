@@ -6,7 +6,7 @@ Publish ảnh từ USB camera lên topic /camera/image_raw
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 import cv2
 import numpy as np
 import sys
@@ -42,8 +42,16 @@ class CameraNode(Node):
         
         self.get_logger().info(f'Camera đã mở tại {video_device} ({width}x{height} @ {fps}fps)')
         
-        # Publisher (publish vào /camera/image_raw để tương thích với code hiện tại)
-        self.publisher = self.create_publisher(Image, '/camera/image_raw', 10)
+        # Publishers
+        self.image_publisher = self.create_publisher(Image, '/camera/image_raw', 10)
+        self.camera_info_publisher = self.create_publisher(CameraInfo, '/camera/camera_info', 10)
+        
+        # Lưu lại width và height để dùng trong camera_info
+        self.width = width
+        self.height = height
+        
+        # Tạo CameraInfo message với tham số mặc định (có thể calibrate sau)
+        self.camera_info = self.create_camera_info()
         
         # Timer để publish ảnh
         timer_period = 1.0 / fps
@@ -74,17 +82,57 @@ class CameraNode(Node):
         
         return img_msg
     
+    def create_camera_info(self):
+        """
+        Tạo CameraInfo message với tham số mặc định
+        (Có thể calibrate camera sau để có tham số chính xác)
+        """
+        camera_info = CameraInfo()
+        camera_info.header.frame_id = self.frame_id
+        camera_info.width = self.width
+        camera_info.height = self.height
+        
+        # Camera matrix (3x3) - mặc định với focal length ước tính
+        # Giả sử camera có góc nhìn ~60 độ
+        fx = fy = self.width / (2.0 * np.tan(np.pi / 6.0))  # ~60 degree FOV
+        cx = self.width / 2.0
+        cy = self.height / 2.0
+        camera_info.k = [fx, 0.0, cx,
+                         0.0, fy, cy,
+                         0.0, 0.0, 1.0]
+        
+        # Distortion model (Plumb Bob / Brown-Conrady)
+        camera_info.distortion_model = "plumb_bob"
+        camera_info.d = [0.0, 0.0, 0.0, 0.0, 0.0]  # Không có distortion (có thể calibrate sau)
+        
+        # Rectification matrix (identity)
+        camera_info.r = [1.0, 0.0, 0.0,
+                         0.0, 1.0, 0.0,
+                         0.0, 0.0, 1.0]
+        
+        # Projection matrix (3x4)
+        camera_info.p = [fx, 0.0, cx, 0.0,
+                         0.0, fy, cy, 0.0,
+                         0.0, 0.0, 1.0, 0.0]
+        
+        return camera_info
+    
     def timer_callback(self):
         ret, frame = self.cap.read()
         if ret:
             try:
                 # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
                 ros_image = self.cv2_to_imgmsg(frame, "bgr8")
-                ros_image.header.stamp = self.get_clock().now().to_msg()
+                current_time = self.get_clock().now().to_msg()
+                ros_image.header.stamp = current_time
                 ros_image.header.frame_id = self.frame_id
                 
-                # Publish
-                self.publisher.publish(ros_image)
+                # Publish image
+                self.image_publisher.publish(ros_image)
+                
+                # Publish camera_info (đồng bộ với image)
+                self.camera_info.header.stamp = current_time
+                self.camera_info_publisher.publish(self.camera_info)
             except Exception as e:
                 self.get_logger().error(f'Lỗi convert ảnh: {str(e)}')
         else:
