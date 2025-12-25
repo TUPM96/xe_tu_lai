@@ -112,6 +112,14 @@ def generate_launch_description():
         description='Chế độ quét của RPLIDAR'
     )
     
+    # Static transform từ base_link đến laser_frame (cần cho rviz)
+    laser_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='laser_tf_publisher',
+        arguments=['0', '0', '0.2', '0', '0', '0', 'base_link', 'laser_frame']
+    )
+    
     lidar_node = Node(
         package='rplidar_ros',
         executable='rplidar_composition',
@@ -124,6 +132,14 @@ def generate_launch_description():
             'angle_compensate': True,
             'scan_mode': LaunchConfiguration('scan_mode')
         }]
+    )
+    
+    # Static transform từ base_link đến camera_link_optical (cần cho rviz)
+    camera_tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera_tf_publisher',
+        arguments=['0', '0', '0.1', '0', '0', '0', 'base_link', 'camera_link_optical']
     )
     
     # Camera
@@ -190,7 +206,9 @@ def generate_launch_description():
         delayed_controller_manager,
         delayed_ackermann_controller_spawner,
         delayed_joint_broad_spawner,
+        laser_tf_node,
         lidar_node,
+        camera_tf_node,
         camera_node,
         autonomous_drive_node
     ])

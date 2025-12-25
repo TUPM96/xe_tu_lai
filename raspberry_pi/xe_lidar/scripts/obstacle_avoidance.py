@@ -10,7 +10,6 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan, Image
 from geometry_msgs.msg import Twist
-from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import math
@@ -58,7 +57,6 @@ class AutonomousDrive(Node):
                 self.image_callback,
                 10
             )
-            self.bridge = CvBridge()
             self.latest_image = None
         
         # Publisher
@@ -90,10 +88,32 @@ class AutonomousDrive(Node):
         self.latest_scan = msg
         self.process_lidar_data(msg)
     
+    def imgmsg_to_cv2(self, img_msg, encoding="bgr8"):
+        """
+        Convert ROS2 Image message sang OpenCV image (numpy array)
+        KHÔNG CẦN cv_bridge!
+        """
+        if encoding == "bgr8" or encoding == "rgb8":
+            # Convert bytes to numpy array
+            dtype = np.uint8
+            img_buf = np.frombuffer(img_msg.data, dtype=dtype)
+            # Reshape to image dimensions
+            if img_msg.height * img_msg.width * 3 == len(img_buf):
+                img_buf = img_buf.reshape((img_msg.height, img_msg.width, 3))
+                # BGR8 is default, RGB8 needs conversion
+                if encoding == "rgb8":
+                    img_buf = cv2.cvtColor(img_buf, cv2.COLOR_RGB2BGR)
+                return img_buf
+            else:
+                raise ValueError(f"Image size mismatch: expected {img_msg.height * img_msg.width * 3}, got {len(img_buf)}")
+        else:
+            raise ValueError(f"Encoding {encoding} chưa được hỗ trợ")
+    
     def image_callback(self, msg):
         """Callback xử lý dữ liệu camera để phát hiện vạch kẻ đường"""
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            # Convert ROS Image message sang OpenCV image (KHÔNG CẦN cv_bridge)
+            cv_image = self.imgmsg_to_cv2(msg, "bgr8")
             self.latest_image = cv_image
             if self.use_camera:
                 self.process_camera_lane_detection(cv_image)

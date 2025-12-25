@@ -11,6 +11,15 @@ def generate_launch_description():
         DeclareLaunchArgument('width', default_value='640', description='Image width'),
         DeclareLaunchArgument('height', default_value='480', description='Image height'),
         DeclareLaunchArgument('fps', default_value='30', description='Frames per second'),
+        
+        # Static transform từ base_link đến camera_link_optical (cần cho rviz)
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='camera_tf_publisher',
+            arguments=['0', '0', '0.1', '0', '0', '0', 'base_link', 'camera_link_optical']
+        ),
+        
         # Node camera dùng OpenCV (không cần v4l2_camera package)
         Node(
             package='xe_lidar',

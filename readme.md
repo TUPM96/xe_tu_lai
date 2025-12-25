@@ -395,10 +395,28 @@ sudo aptitude install -y \
     v4l-utils
 ```
 
+**Lỗi: Rviz "Message Filter dropping message: frame 'camera_link_optical'"**
+
+```bash
+# Lỗi này xảy ra vì thiếu TF transform cho camera frame
+# Đã được fix trong camera.launch.py (có static_transform_publisher)
+# Nếu vẫn lỗi, kiểm tra:
+
+# 1. Kiểm tra transform có được publish không
+ros2 run tf2_ros tf2_echo base_link camera_link_optical
+
+# 2. Nếu không có base_link, dùng frame khác hoặc xem ảnh bằng rqt_image_view
+ros2 run rqt_image_view rqt_image_view /camera/image_raw
+
+# 3. Hoặc publish transform thủ công (Terminal 2):
+ros2 run tf2_ros static_transform_publisher 0 0 0.1 0 0 0 base_link camera_link_optical
+```
+
 **Lưu ý**: 
 - Project này dùng `camera_node.py` (OpenCV) - **KHÔNG CẦN cv_bridge**!
 - `camera_node.py` tự convert OpenCV → ROS Image message, chỉ cần `python3-opencv`
 - Không cần cài `v4l2_camera` package
+- Launch file đã có static transform publisher cho rviz
 
 ### LiDAR không hoạt động
 
@@ -413,6 +431,23 @@ sudo chmod 666 /dev/ttyUSB0
 ros2 run rplidar_ros rplidar_composition --ros-args \
     -p serial_port:=/dev/ttyUSB0 \
     -p serial_baudrate:=115200
+```
+
+**Lỗi: Rviz "Message Filter dropping message: frame 'laser_frame'"**
+
+```bash
+# Lỗi này xảy ra vì thiếu TF transform cho laser frame
+# Đã được fix trong rplidar.launch.py (có static_transform_publisher)
+# Nếu vẫn lỗi, kiểm tra:
+
+# 1. Kiểm tra transform có được publish không
+ros2 run tf2_ros tf2_echo base_link laser_frame
+
+# 2. Hoặc publish transform thủ công (Terminal 2):
+ros2 run tf2_ros static_transform_publisher 0 0 0.2 0 0 0 base_link laser_frame
+
+# 3. Kiểm tra topic /scan có dữ liệu không
+ros2 topic echo /scan --once
 ```
 
 ### Arduino không nhận lệnh
