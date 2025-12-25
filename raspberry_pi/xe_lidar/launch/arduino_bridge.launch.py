@@ -26,6 +26,15 @@ def generate_launch_description():
         }.items()
     )
     
+    # Joint State Publisher để publish joint states (cần cho RSP hiển thị khung xe)
+    print("📊 Joint State Publisher - publish joint states với giá trị mặc định")
+    joint_state_publisher_node = Node(
+        package='joint_state_publisher',
+        executable='joint_state_publisher',
+        name='joint_state_publisher',
+        output='screen'
+    )
+    
     # Launch arguments
     serial_port_arg = DeclareLaunchArgument(
         'serial_port',
@@ -64,6 +73,7 @@ def generate_launch_description():
         baudrate_arg,
         auto_detect_arg,
         rsp,
+        joint_state_publisher_node,  # Cần cho RSP hiển thị khung xe
         arduino_bridge_node,
     ])
 

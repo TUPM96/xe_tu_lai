@@ -32,6 +32,17 @@ def generate_launch_description():
         }.items()
     )
     
+    # Joint State Publisher để publish joint states (cần cho RSP hiển thị khung xe)
+    # Với Arduino, joints được điều khiển bởi Arduino, nhưng RSP cần joint_states để publish transforms
+    # Dùng joint_state_publisher (không GUI) với giá trị mặc định = 0
+    print("📊 Node 1.5: Joint State Publisher - publish joint states với giá trị mặc định")
+    joint_state_publisher_node = Node(
+        package='joint_state_publisher',
+        executable='joint_state_publisher',
+        name='joint_state_publisher',
+        output='screen'
+    )
+    
     # LiDAR
     print("📡 Node 2: RPLIDAR Node")
     lidar_serial_port_arg = DeclareLaunchArgument(
@@ -142,6 +153,7 @@ def generate_launch_description():
     print("=" * 60)
     print("📋 TÓM TẮT CÁC NODE:")
     print("   1. Robot State Publisher (RSP) - chỉ để visualize")
+    print("   1.5. Joint State Publisher - publish joint states (cần cho RSP)")
     print("   2. RPLIDAR Node - /dev/ttyUSB0")
     print("   3. Camera Node - /dev/video0")
     print("   4. Arduino Bridge - /dev/ttyACM0")
@@ -161,6 +173,7 @@ def generate_launch_description():
         video_device_arg,
         arduino_serial_port_arg,
         rsp,
+        joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,
         lidar_node,
         camera_tf_node,

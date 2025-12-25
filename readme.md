@@ -712,6 +712,42 @@ ros2 topic echo /cmd_vel
 ros2 node list
 ```
 
+### Kiểm tra Robot State Publisher (RSP) và khung xe
+
+```bash
+# 1. Kiểm tra RSP node có đang chạy không
+ros2 node list | grep robot_state_publisher
+
+# 2. Kiểm tra topic /robot_description có được publish không
+ros2 topic list | grep robot_description
+ros2 topic echo /robot_description --once | head -50
+
+# 3. Kiểm tra TF tree (xem các frames có được publish không)
+ros2 run tf2_tools view_frames
+# File frames.pdf sẽ được tạo ra trong thư mục hiện tại
+
+# 4. Kiểm tra TF giữa các frames
+ros2 run tf2_ros tf2_echo base_link laser_frame
+# Hoặc
+ros2 run tf2_ros tf2_echo odom base_link
+
+# 5. Xem tất cả frames hiện có
+ros2 run tf2_ros tf2_monitor
+
+# 6. Kiểm tra node info của RSP
+ros2 node info /robot_state_publisher
+
+# 7. Nếu RSP có lỗi, kiểm tra xem URDF file có hợp lệ không:
+cd ~/ros2_ws
+source install/setup.bash
+ros2 run xacro xacro install/xe_lidar/share/xe_lidar/description/robot_ackermann.urdf.xacro use_ros2_control:=false sim_mode:=false > /tmp/test_urdf.urdf
+# Nếu có lỗi, sẽ hiển thị trên terminal
+
+# 8. Kiểm tra có cần joint_states không (nếu URDF có joints)
+ros2 topic list | grep joint_state
+# Nếu không có /joint_states và RSP không hiện khung, có thể cần joint_state_publisher
+```
+
 ### Visualize với RViz2
 
 ```bash

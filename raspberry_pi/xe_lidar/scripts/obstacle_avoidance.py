@@ -47,7 +47,7 @@ class AutonomousDrive(Node):
             self.scan_callback,
             10
         )
-        self.get_logger().info('Đã subscribe topic /scan cho LiDAR')
+        self.get_logger().info('Da subscribe topic /scan cho LiDAR')
         
         if self.use_camera:
             camera_topic = self.get_parameter('camera_topic').value
@@ -58,6 +58,9 @@ class AutonomousDrive(Node):
                 10
             )
             self.latest_image = None
+            
+            # Publisher cho ảnh camera đã vẽ lane detection
+            self.image_debug_pub = self.create_publisher(Image, '/camera/image_debug', 10)
         
         # Publisher
         self.cmd_vel_pub = self.create_publisher(
@@ -77,14 +80,14 @@ class AutonomousDrive(Node):
         # Timer để xuất lệnh điều khiển
         self.timer = self.create_timer(0.1, self.control_loop)  # 10 Hz
         
-        self.get_logger().info('Autonomous Drive Node đã khởi động!')
+        self.get_logger().info('Autonomous Drive Node da khoi dong!')
         self.get_logger().info(f'Camera: {self.use_camera}, LiDAR: Enabled')
         self.get_logger().info(f'Safe distance: {self.safe_distance}m')
     
     def scan_callback(self, msg):
-        """Callback xử lý dữ liệu LiDAR để phát hiện vật cản"""
+        """Callback xu ly du lieu LiDAR de phat hien vat can"""
         if self.latest_scan is None:
-            self.get_logger().info('Đã nhận được dữ liệu LiDAR lần đầu!')
+            self.get_logger().info('Da nhan duoc du lieu LiDAR lan dau!')
         self.latest_scan = msg
         self.process_lidar_data(msg)
     
@@ -118,7 +121,7 @@ class AutonomousDrive(Node):
             if self.use_camera:
                 self.process_camera_lane_detection(cv_image)
         except Exception as e:
-            self.get_logger().error(f'Lỗi xử lý ảnh: {str(e)}')
+            self.get_logger().error(f'Loi xu ly anh: {str(e)}')
     
     def process_lidar_data(self, scan):
         """Xử lý dữ liệu LiDAR để phát hiện vật cản"""
@@ -172,72 +175,93 @@ class AutonomousDrive(Node):
         else:
             self.obstacle_detected = False
     
+    def cv2_to_imgmsg(self, cv_image, encoding="bgr8"):
+        """Convert OpenCV image sang ROS2 Image message"""
+        img_msg = Image()
+        img_msg.height, img_msg.width = cv_image.shape[:2]
+        
+        if encoding == "bgr8":
+            img_msg.encoding = "bgr8"
+            img_msg.is_bigendian = 0
+            img_msg.step = img_msg.width * 3
+            img_msg.data = cv_image.tobytes()
+        elif encoding == "rgb8":
+            img_msg.encoding = "rgb8"
+            img_msg.is_bigendian = 0
+            img_msg.step = img_msg.width * 3
+            img_msg.data = cv_image.tobytes()
+        else:
+            raise ValueError(f"Encoding {encoding} chua duoc ho tro")
+        
+        return img_msg
+    
     def process_camera_lane_detection(self, image):
-        """Xử lý camera để phát hiện 2 vạch trắng 2 bên đường và điều chỉnh đi giữa đường"""
+        """Xu ly camera de phat hien 2 vach trang 2 ben duong va dieu chinh di giua duong"""
         if image is None:
             return
         
         try:
             height, width = image.shape[:2]
+            image_with_lanes = image.copy()
             
-            # Tạo vùng quan tâm (ROI) - phần dưới ảnh (vùng đường)
-            roi_top = int(height * 0.4)  # Bắt đầu từ 40% chiều cao
+            # Tao vung quan tam (ROI) - phan duoi anh (vung duong)
+            roi_top = int(height * 0.4)  # Bat dau tu 40% chieu cao
             roi_bottom = height
             roi = image[roi_top:roi_bottom, :]
             
-            # Chuyển sang HSV để dễ phát hiện màu trắng
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            # Chuyen sang Grayscale de phat hien vach den
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
             
-            # Tạo mask cho màu trắng (vạch kẻ đường)
-            # Màu trắng trong HSV: V cao, S thấp
-            lower_white = np.array([0, 0, 200])  # Ngưỡng dưới cho màu trắng
-            upper_white = np.array([180, 30, 255])  # Ngưỡng trên cho màu trắng
-            white_mask = cv2.inRange(hsv, lower_white, upper_white)
+            # Tao mask cho mau den (vach ke duong den)
+            # Vach den: gia tri pixel thap (0-80)
+            _, black_mask = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY_INV)
             
-            # Áp dụng Gaussian blur để làm mịn
-            blurred = cv2.GaussianBlur(white_mask, (5, 5), 0)
+            # Ap dung Gaussian blur de lam min
+            blurred = cv2.GaussianBlur(black_mask, (5, 5), 0)
             
-            # Phát hiện cạnh bằng Canny
+            # Phat hien canh bang Canny
             edges = cv2.Canny(blurred, 50, 150)
             
-            # Phát hiện đường thẳng bằng HoughLinesP
+            # Phat hien duong thang bang HoughLinesP
             lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=30, 
                                    minLineLength=20, maxLineGap=15)
             
-            if lines is None or len(lines) == 0:
-                self.lane_detected = False
-                self.lane_center_offset = 0.0
-                return
-            
-            # Phân loại đường thẳng thành bên trái và bên phải
+            # Phan loai duong thang thanh ben trai va ben phai
             left_lines = []
             right_lines = []
             center_x = width / 2
+            left_x_avg = None
+            right_x_avg = None
 
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                # Tính góc và điểm giữa của đường thẳng
-                if x2 != x1:
-                    slope = (y2 - y1) / (x2 - x1)
-                    mid_x = (x1 + x2) / 2
+            if lines is not None and len(lines) > 0:
+                for line in lines:
+                    x1, y1, x2, y2 = line[0]
+                    # Tinh goc va diem giua cua duong thang
+                    if x2 != x1:
+                        slope = (y2 - y1) / (x2 - x1)
+                        mid_x = (x1 + x2) / 2
 
-                    # QUAN TRỌNG: Trong hệ tọa độ ảnh, Y tăng từ trên xuống
-                    # Vạch bên TRÁI: từ trên-trái xuống dưới-phải → slope DƯƠNG (y↑, x↑)
-                    # Vạch bên PHẢI: từ trên-phải xuống dưới-trái → slope ÂM (y↑, x↓)
-                    if slope > 0.2 and mid_x < center_x:  # Đường bên trái (slope dương, bên trái màn hình)
-                        left_lines.append(line[0])
-                    elif slope < -0.2 and mid_x > center_x:  # Đường bên phải (slope âm, bên phải màn hình)
-                        right_lines.append(line[0])
+                        # QUAN TRONG: Trong he toa do anh, Y tang tu tren xuong
+                        # Vach ben TRAI: tu tren-trai xuong duoi-phai → slope DUONG (y↑, x↑)
+                        # Vach ben PHAI: tu tren-phai xuong duoi-trai → slope AM (y↑, x↓)
+                        if slope > 0.2 and mid_x < center_x:  # Duong ben trai (slope duong, ben trai man hinh)
+                            left_lines.append(line[0])
+                            # Ve vach ben trai mau xanh (day hon de thay ro)
+                            cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (255, 0, 0), 3)
+                        elif slope < -0.2 and mid_x > center_x:  # Duong ben phai (slope am, ben phai man hinh)
+                            right_lines.append(line[0])
+                            # Ve vach ben phai mau do (day hon de thay ro)
+                            cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (0, 0, 255), 3)
             
-            # Tính điểm trung bình của các đường ở dưới cùng của ROI
+            # Tinh diem trung binh cua cac duong o duoi cung cua ROI
             left_x_points = []
             right_x_points = []
             roi_height = roi_bottom - roi_top
             
-            # Lấy điểm ở dưới cùng (y lớn nhất) của mỗi đường
+            # Lay diem o duoi cung (y lon nhat) cua moi duong
             for line in left_lines:
                 x1, y1, x2, y2 = line
-                # Lấy điểm có y lớn hơn (gần camera hơn)
+                # Lay diem co y lon hon (gan camera hon)
                 if y1 > y2:
                     left_x_points.append(x1)
                 else:
@@ -250,35 +274,113 @@ class AutonomousDrive(Node):
                 else:
                     right_x_points.append(x2)
             
-            # Tính offset từ giữa đường
+            # Tinh offset tu giua duong
             if left_x_points and right_x_points:
-                # Có cả 2 vạch kẻ đường - đi giữa
+                # Co ca 2 vach ke duong - di giua
                 left_x_avg = np.mean(left_x_points)
                 right_x_avg = np.mean(right_x_points)
                 lane_center = (left_x_avg + right_x_avg) / 2
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)  # Normalize về -1 đến 1
+                self.lane_center_offset = (lane_center - center_x) / (width / 2)  # Normalize ve -1 den 1
                 self.lane_detected = True
-                self.get_logger().debug(f'Phát hiện 2 vạch: trái={left_x_avg:.1f}, phải={right_x_avg:.1f}, center={lane_center:.1f}')
+                
+                # Ve duong giua lan (mau vang)
+                center_y_bottom = height
+                center_y_top = roi_top
+                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom), 
+                        (int(lane_center), center_y_top), (0, 255, 255), 3)
+                
+                # Ve duong giua man hinh (mau xanh la)
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                        (int(center_x), center_y_top), (0, 255, 0), 2)
             elif left_x_points:
-                # Chỉ có vạch bên trái, giả định vạch phải cách 2m (khoảng 200 pixel)
+                # Chi co vach ben trai, gia dinh vach phai cach 2m (khoang 200 pixel)
                 left_x_avg = np.mean(left_x_points)
-                lane_center = left_x_avg + 200  # Offset sang phải
+                lane_center = left_x_avg + 200  # Offset sang phai
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-                self.get_logger().debug(f'Chỉ phát hiện vạch trái: {left_x_avg:.1f}')
+                
+                # Ve duong giua uoc tinh
+                center_y_bottom = height
+                center_y_top = roi_top
+                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom), 
+                        (int(lane_center), center_y_top), (0, 255, 255), 3)
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                        (int(center_x), center_y_top), (0, 255, 0), 2)
             elif right_x_points:
-                # Chỉ có vạch bên phải, giả định vạch trái cách 2m
+                # Chi co vach ben phai, gia dinh vach trai cach 2m
                 right_x_avg = np.mean(right_x_points)
-                lane_center = right_x_avg - 200  # Offset sang trái
+                lane_center = right_x_avg - 200  # Offset sang trai
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-                self.get_logger().debug(f'Chỉ phát hiện vạch phải: {right_x_avg:.1f}')
+                
+                # Ve duong giua uoc tinh
+                center_y_bottom = height
+                center_y_top = roi_top
+                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom), 
+                        (int(lane_center), center_y_top), (0, 255, 255), 3)
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                        (int(center_x), center_y_top), (0, 255, 0), 2)
             else:
                 self.lane_detected = False
                 self.lane_center_offset = 0.0
+                # Ve duong giua man hinh
+                center_y_bottom = height
+                center_y_top = roi_top
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                        (int(center_x), center_y_top), (0, 255, 0), 2)
+            
+            # Ve text thong tin
+            status_text = "Phat hien lan duong" if self.lane_detected else "Khong phat hien lan"
+            offset_text = f"Offset: {self.lane_center_offset:.2f}"
+            cv2.putText(image_with_lanes, status_text, (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(image_with_lanes, offset_text, (10, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            # Ve huong can di
+            if self.lane_detected:
+                # Tinh vi tri de ve mui ten chi huong
+                arrow_x = int(center_x)
+                arrow_y = int(height * 0.75)  # Vi tri o 75% chieu cao
+                
+                # Tinh do lech de ve mui ten (scale offset)
+                offset_pixels = int(self.lane_center_offset * width * 0.4)  # Scale offset
+                arrow_end_x = arrow_x + offset_pixels
+                arrow_end_y = arrow_y - 60  # Mui ten huong len tren
+                
+                # Ve mui ten chi huong (mau vang, day)
+                if abs(offset_pixels) > 5:  # Chi ve mui ten neu co offset
+                    cv2.arrowedLine(image_with_lanes, 
+                                   (arrow_x, arrow_y),
+                                   (arrow_end_x, arrow_end_y),
+                                   (0, 255, 255), 5, tipLength=0.3)
+                
+                # Text huong di
+                if abs(self.lane_center_offset) < 0.1:
+                    direction_text = "Di thang"
+                    direction_color = (0, 255, 0)  # Xanh la
+                elif self.lane_center_offset > 0:
+                    direction_text = f"Re trai ({abs(self.lane_center_offset):.2f})"
+                    direction_color = (255, 165, 0)  # Mau cam
+                else:
+                    direction_text = f"Re phai ({abs(self.lane_center_offset):.2f})"
+                    direction_color = (255, 165, 0)  # Mau cam
+                
+                cv2.putText(image_with_lanes, direction_text, (10, 90), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, direction_color, 2)
+            else:
+                cv2.putText(image_with_lanes, "Khong xac dinh duoc huong", (10, 90), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            
+            # Publish anh da ve
+            if hasattr(self, 'image_debug_pub'):
+                ros_image = self.cv2_to_imgmsg(image_with_lanes, "bgr8")
+                ros_image.header.stamp = self.get_clock().now().to_msg()
+                ros_image.header.frame_id = "camera_link_optical"
+                self.image_debug_pub.publish(ros_image)
                 
         except Exception as e:
-            self.get_logger().debug(f'Lỗi xử lý camera: {str(e)}')
+            self.get_logger().debug(f'Loi xu ly camera: {str(e)}')
             self.lane_detected = False
             self.lane_center_offset = 0.0
     
@@ -290,41 +392,41 @@ class AutonomousDrive(Node):
         """
         cmd = Twist()
         
-        # Xử lý trường hợp chưa có LiDAR (chạy chậm để an toàn)
+        # Xu ly truong hop chua co LiDAR (chay cham de an toan)
         if self.latest_scan is None:
             if self.lidar_warning_count % 20 == 0:
-                self.get_logger().warn('Chưa nhận được dữ liệu LiDAR, chạy chậm để an toàn...')
+                self.get_logger().warn('Chua nhan duoc du lieu LiDAR, chay cham de an toan...')
             self.lidar_warning_count += 1
             
-            # Chạy chậm khi chưa có LiDAR (tốc độ 50% để an toàn)
+            # Chay cham khi chua co LiDAR (toc do 50% de an toan)
             cmd.linear.x = self.max_linear_speed * 0.5
             cmd.angular.z = 0.0
             self.cmd_vel_pub.publish(cmd)
             return
         
-        # Reset counter khi đã có dữ liệu
+        # Reset counter khi da co du lieu
         if self.lidar_warning_count > 0:
             self.lidar_warning_count = 0
-            self.get_logger().info('Đã nhận được dữ liệu LiDAR, chuyển sang chế độ tự động!')
+            self.get_logger().info('Da nhan duoc du lieu LiDAR, chuyen sang che do tu dong!')
         
-        # ƯU TIÊN PHỤ: Kiểm tra vật cản bằng LiDAR (chỉ khi có vật cản mới can thiệp)
+        # UU TIEN PHU: Kiem tra vat can bang LiDAR (chi khi co vat can moi can thiep)
         if self.obstacle_detected:
-            # Có vật cản, thực hiện tránh (tạm thời bỏ qua camera)
+            # Co vat can, thuc hien tranh (tam thoi bo qua camera)
             if self.obstacle_direction == 0:
-                # Vật cản ở giữa hoặc cả hai bên, lùi lại và quay
+                # Vat can o giua hoac ca hai ben, lui lai va quay
                 cmd.linear.x = -self.max_linear_speed * 0.5
                 cmd.angular.z = self.max_angular_speed * 0.8
-                self.get_logger().info('⚠️ Vật cản phía trước - Lùi lại và quay phải')
+                self.get_logger().info('⚠️ Vat can phia truoc - Lui lai va quay phai')
             elif self.obstacle_direction < 0:
-                # Vật cản bên trái, quay phải để tránh
+                # Vat can ben trai, quay phai de tranh
                 cmd.linear.x = self.max_linear_speed * 0.6
                 cmd.angular.z = -self.max_angular_speed * 0.7
-                self.get_logger().info('⚠️ Vật cản bên trái - Quay phải để tránh')
+                self.get_logger().info('⚠️ Vat can ben trai - Quay phai de tranh')
             else:
-                # Vật cản bên phải, quay trái để tránh
+                # Vat can ben phai, quay trai de tranh
                 cmd.linear.x = self.max_linear_speed * 0.6
                 cmd.angular.z = self.max_angular_speed * 0.7
-                self.get_logger().info('⚠️ Vật cản bên phải - Quay trái để tránh')
+                self.get_logger().info('⚠️ Vat can ben phai - Quay trai de tranh')
         else:
             # KHÔNG có vật cản - ƯU TIÊN 2: Camera để đi đúng làn đường
             if self.use_camera and self.lane_detected:
@@ -353,11 +455,11 @@ class AutonomousDrive(Node):
                     f'angular.z={cmd.angular.z:.2f} rad/s'
                 )
             else:
-                # Không phát hiện được vạch kẻ đường, đi thẳng với tốc độ đầy đủ
+                # Khong phat hien duoc vach ke duong, di thang voi toc do day du
                 cmd.linear.x = self.max_linear_speed
                 cmd.angular.z = 0.0
                 if self.use_camera:
-                    self.get_logger().debug('📷 Không phát hiện làn đường, đi thẳng')
+                    self.get_logger().debug('📷 Khong phat hien lan duong, di thang')
         
         self.cmd_vel_pub.publish(cmd)
 
@@ -373,7 +475,7 @@ def main(args=None):
         pass
     except Exception as e:
         if node:
-            node.get_logger().error(f'Lỗi trong node: {str(e)}')
+            node.get_logger().error(f'Loi trong node: {str(e)}')
     finally:
         # Dừng robot trước khi thoát (chỉ nếu context còn valid)
         if node:
