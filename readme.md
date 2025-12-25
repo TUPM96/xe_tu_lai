@@ -70,7 +70,7 @@ cd ~/ros2_ws/src
 # Hoặc copy project vào đây
 cd ~/ros2_ws
 
-# Cài đặt dependencies
+# Cài đặt dependencies ROS2
 sudo aptitude install -y \
     ros-jazzy-cv-bridge \
     ros-jazzy-v4l2-camera \
@@ -83,6 +83,14 @@ sudo aptitude install -y \
     python3-numpy \
     python3-pip \
     python3-serial
+
+# Nếu v4l2_camera không tìm thấy, cài đặt từ source:
+# cd ~/ros2_ws/src
+# git clone https://github.com/ros2/v4l2_camera.git -b jazzy
+# cd ~/ros2_ws
+# rosdep install --from-paths src --ignore-src -r -y
+# colcon build --packages-select v4l2_camera
+# source install/setup.bash
 
 # QUAN TRỌNG: NumPy phải < 2.0 (cv_bridge chưa hỗ trợ NumPy 2.x)
 pip3 install "numpy<2.0" pyserial
@@ -325,10 +333,38 @@ Thêm các components:
 
 ### Camera không hoạt động
 
+**Lỗi: package 'v4l2_camera' not found**
+
 ```bash
-# Xem FIX_CAMERA.md
-# Hoặc thử format khác
+# Cách 1: Cài đặt từ apt (nếu có trong repo)
+sudo aptitude install -y ros-jazzy-v4l2-camera
+source /opt/ros/jazzy/setup.bash
+
+# Cách 2: Cài đặt từ source (nếu không có trong repo)
+cd ~/ros2_ws/src
+git clone https://github.com/ros2/v4l2_camera.git -b jazzy
+# Hoặc thử branch rolling nếu jazzy không có
+# git clone https://github.com/ros2/v4l2_camera.git -b rolling
+
+cd ~/ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --packages-select v4l2_camera
+source install/setup.bash
+```
+
+**Camera bị nhảy hình:**
+```bash
+# Thử format khác
 ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0 pixel_format:=MJPG
+
+# Hoặc cài đặt GStreamer plugins
+sudo aptitude install -y \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    v4l-utils
 ```
 
 ### LiDAR không hoạt động
