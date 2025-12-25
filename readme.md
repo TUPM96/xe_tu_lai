@@ -703,17 +703,124 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args \
 ros2 topic list
 ```
 
-### Xem dữ liệu từng topic
+### Debug từng topic
+
+#### 1. Camera Topics
 
 ```bash
-# Camera
-ros2 topic echo /camera/image_raw --once
+# Xem ảnh camera gốc (chỉ hiển thị metadata, không hiển thị ảnh)
+ros2 topic echo /camera/image_raw --once | head -20
 
-# LiDAR
-ros2 topic echo /scan --once
+# Kiểm tra camera có đang publish không (tần số)
+ros2 topic hz /camera/image_raw
 
-# Lệnh điều khiển
+# Xem thông tin camera (intrinsic/extrinsic parameters)
+ros2 topic echo /camera/camera_info --once
+
+# Xem ảnh debug (có vẽ lane detection và hướng lái)
+ros2 topic echo /camera/image_debug --once | head -20
+
+# Kiểm tra debug image có đang publish không
+ros2 topic hz /camera/image_debug
+
+# Xem ảnh trực tiếp (cần cài rqt_image_view)
+# Cài đặt: sudo apt install -y ros-jazzy-rqt-image-view
+ros2 run rqt_image_view rqt_image_view /camera/image_raw
+ros2 run rqt_image_view rqt_image_view /camera/image_debug
+```
+
+#### 2. LiDAR Topics
+
+```bash
+# Xem dữ liệu LiDAR (scan)
+ros2 topic echo /scan --once | head -50
+
+# Kiểm tra LiDAR có đang publish không (tần số)
+ros2 topic hz /scan
+
+# Xem thông tin topic (loại message, số subscribers/publishers)
+ros2 topic info /scan
+```
+
+#### 3. Điều khiển Topics
+
+```bash
+# Xem lệnh điều khiển đang được gửi (cmd_vel)
 ros2 topic echo /cmd_vel
+
+# Kiểm tra tần số publish cmd_vel
+ros2 topic hz /cmd_vel
+
+# Xem thông tin topic
+ros2 topic info /cmd_vel
+
+# Gửi lệnh điều khiển thủ công (test)
+# Tiến thẳng
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}"
+
+# Quay trái
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.2, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.5}"
+
+# Dừng
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}"
+```
+
+#### 4. Odometry Topics (từ Arduino Bridge)
+
+```bash
+# Xem odometry (vị trí và vận tốc của robot)
+ros2 topic echo /odom
+
+# Kiểm tra tần số publish
+ros2 topic hz /odom
+
+# Xem thông tin topic
+ros2 topic info /odom
+```
+
+#### 5. Robot Description & TF Topics
+
+```bash
+# Xem robot description (URDF)
+ros2 topic echo /robot_description --once | head -100
+
+# Xem joint states (cần cho RSP)
+ros2 topic echo /joint_states
+
+# Kiểm tra tần số publish joint_states
+ros2 topic hz /joint_states
+
+# Xem TF transforms
+ros2 run tf2_ros tf2_echo base_link laser_frame
+ros2 run tf2_ros tf2_echo odom base_link
+
+# Xem tất cả frames trong TF tree
+ros2 run tf2_ros tf2_monitor
+
+# Tạo file PDF của TF tree
+ros2 run tf2_tools view_frames
+# File frames.pdf sẽ được tạo ra trong thư mục hiện tại
+```
+
+#### 6. Kiểm tra tất cả topics cùng lúc
+
+```bash
+# Xem danh sách tất cả topics
+ros2 topic list
+
+# Xem tần số của tất cả topics đang active
+ros2 topic hz /camera/image_raw /scan /cmd_vel /odom
+
+# Xem type của các topics
+ros2 topic list -t
+
+# Xem chi tiết một topic cụ thể
+ros2 topic info /camera/image_raw
+ros2 topic info /scan
+ros2 topic info /cmd_vel
 ```
 
 ### Xem nodes đang chạy
