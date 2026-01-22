@@ -515,6 +515,110 @@ sudo journalctl -u xrdp-sesman -n 100 --no-pager
 
 **⚠️ QUAN TRỌNG**: Phải test từng phần cứng trước khi chạy tự động!
 
+### Test Servo (Bánh lái)
+
+Script test servo điều khiển bánh lái với các góc quay khác nhau.
+
+```bash
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+
+# Cấp quyền thực thi (chỉ cần làm 1 lần)
+chmod +x test_servo.py
+
+# Chạy test servo
+python3 test_servo.py /dev/ttyACM0
+```
+
+**Chế độ test:**
+1. **Test tự động**: Servo sẽ tự động quay qua các góc: trái nhẹ, trái mạnh, phải nhẹ, phải mạnh, tối đa
+2. **Test thủ công**: Điều khiển servo bằng bàn phím:
+   - `a`: Quay trái
+   - `d`: Quay phải
+   - `c`: Về vị trí giữa (center)
+   - `w/s`: Tăng/giảm bước góc quay
+   - `q`: Thoát
+
+**Kết quả mong đợi:**
+- Servo quay mượt qua các góc
+- Không có tiếng kêu bất thường
+- Góc quay đối xứng trái/phải
+
+### Test Motor DC (Tiến/Lùi)
+
+Script test motor DC điều khiển tiến/lùi với các tốc độ khác nhau.
+
+```bash
+cd ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts
+
+# Cấp quyền thực thi (chỉ cần làm 1 lần)
+chmod +x test_motor.py
+
+# Chạy test motor
+python3 test_motor.py /dev/ttyACM0
+```
+
+**⚠️ CẢNH BÁO**: Đặt xe lên giá đỡ hoặc nơi an toàn trước khi test motor!
+
+**Chế độ test:**
+1. **Test tự động**: Motor sẽ chạy qua các tốc độ: 30%, 50%, 70%, 100% (tiến và lùi)
+2. **Test thủ công**: Điều khiển motor bằng bàn phím:
+   - `w`: Tiến / Tăng tốc
+   - `s`: Lùi / Giảm tốc
+   - `x`: Dừng khẩn cấp (Emergency Stop)
+   - `+/-`: Tăng/giảm bước tốc độ
+   - `q`: Thoát
+3. **Test Ramp**: Tăng/giảm tốc độ từ từ từ 0% → 100% → 0%
+
+**Kết quả mong đợi:**
+- Motor quay đúng chiều (tiến/lùi)
+- Tốc độ tăng/giảm theo lệnh
+- Motor dừng ngay khi nhận lệnh dừng
+
+### Test Kết hợp Servo + Motor (ROS2)
+
+Test điều khiển cả servo và motor qua ROS2 topic `/cmd_vel`:
+
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+
+# Terminal 1: Chạy Arduino bridge
+ros2 launch xe_lidar arduino_bridge.launch.py serial_port:=/dev/ttyACM0
+
+# Terminal 2: Gửi lệnh test
+# Tiến thẳng
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}" -1
+
+# Tiến + quay trái
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.5}" -1
+
+# Tiến + quay phải
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: -0.5}" -1
+
+# Lùi thẳng
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: -0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}" -1
+
+# Lùi + quay trái (servo đảo chiều so với tiến)
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: -0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.5}" -1
+
+# Dừng
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+    "linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}" -1
+```
+
+**Giải thích tham số:**
+- `linear.x`: Tốc độ tiến/lùi (m/s). Dương = tiến, âm = lùi
+- `angular.z`: Tốc độ quay (rad/s). Dương = trái, âm = phải
+
+**Lưu ý về Ackermann Steering:**
+- Khi `linear.x = 0`, servo sẽ không quay (vì Ackermann steering cần tốc độ để tính góc lái)
+- Khi lùi, chiều quay của servo sẽ đảo ngược để xe lùi đúng hướng
+
 ### Test Camera
 
 ```bash
