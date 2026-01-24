@@ -4,10 +4,11 @@ Script chinh de khoi dong tat ca cac thanh phan
 Su dung: python3 start_all.py
 
 Cac script rieng le:
-  python3 start_lidar.py      - Khoi dong LiDAR
-  python3 start_camera.py     - Khoi dong Camera
-  python3 start_arduino.py    - Khoi dong Arduino Bridge
-  python3 start_autonomous.py - Khoi dong Autonomous Drive (xu ly)
+  python3 start_robot_description.py - Khoi dong Robot State Publisher (URDF, transforms)
+  python3 start_lidar.py             - Khoi dong LiDAR
+  python3 start_camera.py            - Khoi dong Camera
+  python3 start_arduino.py           - Khoi dong Arduino Bridge
+  python3 start_autonomous.py        - Khoi dong Autonomous Drive (xu ly)
 """
 
 import subprocess
@@ -87,19 +88,23 @@ class RobotLauncher:
         print()
 
         # Khoi dong tung thanh phan
-        print("[1/4] Khoi dong LiDAR...")
+        print("[1/5] Khoi dong Robot State Publisher...")
+        self.start_component("RobotDescription", "start_robot_description.py")
+        time.sleep(2)
+
+        print("[2/5] Khoi dong LiDAR...")
         self.start_component("LiDAR", "start_lidar.py", ['--port', lidar_port])
         time.sleep(2)
 
-        print("[2/4] Khoi dong Camera...")
+        print("[3/5] Khoi dong Camera...")
         self.start_component("Camera", "start_camera.py", ['--device', camera_device])
         time.sleep(2)
 
-        print("[3/4] Khoi dong Arduino Bridge...")
+        print("[4/5] Khoi dong Arduino Bridge...")
         self.start_component("Arduino", "start_arduino.py", ['--port', arduino_port])
         time.sleep(2)
 
-        print("[4/4] Khoi dong Autonomous Drive...")
+        print("[5/5] Khoi dong Autonomous Drive...")
         self.start_component("Autonomous", "start_autonomous.py")
 
         print()
@@ -108,8 +113,9 @@ class RobotLauncher:
         print("=" * 50)
         print()
         print("Cac thanh phan dang chay:")
-        print("  - LiDAR: /scan topic")
-        print("  - Camera: /camera/image_raw topic")
+        print("  - RobotDescription: /robot_description, /tf, /tf_static")
+        print("  - LiDAR: /scan")
+        print("  - Camera: /camera/image_raw")
         print("  - Arduino: nhan /cmd_vel, gui toi Arduino")
         print("  - Autonomous: xu ly va dieu khien")
         print()
