@@ -220,12 +220,24 @@ class AutonomousDrive(Node):
             
             # Chuyen sang Grayscale de phat hien vach den
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            
-            # Tao mask cho mau den (vach ke duong den)
-            # Vach den: gia tri pixel thap (0-80)
-            _, black_mask = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY_INV)
-            
-            # Ap dung Gaussian blur de lam min
+
+            # Ap dung Gaussian blur truoc de giam nhieu
+            gray_blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+            # Dung Adaptive Threshold de tu dong dieu chinh theo anh sang
+            # ADAPTIVE_THRESH_MEAN_C: threshold = mean of neighborhood - C
+            # Block size = 25: kich thuoc vung lan can
+            # C = 10: hang so tru di (tang len de detect vach toi hon)
+            black_mask = cv2.adaptiveThreshold(
+                gray_blurred,
+                255,
+                cv2.ADAPTIVE_THRESH_MEAN_C,
+                cv2.THRESH_BINARY_INV,
+                blockSize=25,
+                C=10
+            )
+
+            # Ap dung them mot lan blur de lam min mask
             blurred = cv2.GaussianBlur(black_mask, (5, 5), 0)
             
             # Phat hien canh bang Canny
