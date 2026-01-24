@@ -44,6 +44,7 @@ install(PROGRAMS
   scripts/obstacle_avoidance.py
   scripts/arduino_bridge.py
   scripts/camera_node.py
+  scripts/scan_filter.py
   scripts/start_lidar.py
   scripts/start_camera.py
   scripts/start_arduino.py
@@ -58,6 +59,7 @@ install(PROGRAMS
   scripts/obstacle_avoidance.py
   scripts/arduino_bridge.py
   scripts/camera_node.py
+  scripts/scan_filter.py
   scripts/start_lidar.py
   scripts/start_camera.py
   scripts/start_arduino.py
