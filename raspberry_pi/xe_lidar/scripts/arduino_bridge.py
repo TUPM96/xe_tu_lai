@@ -12,6 +12,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Quaternion
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import JointState
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import serial
@@ -93,6 +94,19 @@ class ArduinoBridge(Node):
             self.odom_publisher = self.create_publisher(Odometry, '/odom', 10)
             self.tf_broadcaster = TransformBroadcaster(self)
             self.get_logger().info('Đã tạo Odometry publisher và TF broadcaster')
+
+        # Joint State publisher
+        self.joint_state_pub = self.create_publisher(JointState, '/joint_states', 10)
+        self.get_logger().info('Đã tạo Joint State publisher')
+
+        # Robot parameters (phải khớp với URDF)
+        self.wheelbase = 0.4  # Khoảng cách trục trước-sau (m)
+        self.wheel_radius = 0.034  # Bán kính bánh xe (m)
+        self.max_steer_angle = 0.5236  # Góc lái tối đa (rad) ~30 độ
+
+        # Joint states
+        self.steering_angle = 0.0  # Góc lái hiện tại
+        self.wheel_position = 0.0  # Vị trí bánh xe (tích lũy)
         
         # Biến cho odometry (dead reckoning từ cmd_vel)
         self.x = 0.0  # Vị trí x (m)
@@ -232,6 +246,9 @@ class ArduinoBridge(Node):
         # Publish odometry từ cmd_vel (dead reckoning)
         if self.publish_odom:
             self.update_and_publish_odometry()
+
+        # Publish joint states
+        self.publish_joint_states()
     
     def update_and_publish_odometry(self):
         """Tính toán và publish odometry từ cmd_vel (dead reckoning)"""
@@ -306,7 +323,77 @@ class ArduinoBridge(Node):
         
         # Cập nhật thời gian
         self.last_odom_time = current_time
-    
+
+    def publish_joint_states(self):
+        """Publish joint states dựa trên cmd_vel"""
+        current_time = self.get_clock().now()
+
+        # Tính góc lái từ angular velocity (Ackermann steering)
+        v = self.last_linear
+        omega = self.last_angular
+
+        if abs(v) > 0.01 and abs(omega) > 0.01:
+            # steering_angle = atan(wheelbase * omega / v)
+            self.steering_angle = math.atan(self.wheelbase * omega / v)
+            # Giới hạn góc lái
+            self.steering_angle = max(-self.max_steer_angle,
+                                      min(self.max_steer_angle, self.steering_angle))
+        elif abs(v) < 0.01:
+            # Đứng yên, giữ góc lái hiện tại
+            pass
+
+        # Tính vị trí bánh xe (tích lũy góc quay)
+        dt = 0.1  # 10 Hz
+        wheel_angular_velocity = v / self.wheel_radius  # rad/s
+        self.wheel_position += wheel_angular_velocity * dt
+
+        # Normalize wheel position về [-pi, pi] để tránh overflow
+        while self.wheel_position > math.pi:
+            self.wheel_position -= 2 * math.pi
+        while self.wheel_position < -math.pi:
+            self.wheel_position += 2 * math.pi
+
+        # Tạo JointState message
+        joint_state = JointState()
+        joint_state.header.stamp = current_time.to_msg()
+        joint_state.header.frame_id = ''
+
+        # Tên các joints (phải khớp với URDF)
+        joint_state.name = [
+            'steering_wheel_joint',
+            'front_left_steering_joint',
+            'front_right_steering_joint',
+            'front_left_wheel_joint',
+            'front_right_wheel_joint',
+            'rear_left_wheel_joint',
+            'rear_right_wheel_joint'
+        ]
+
+        # Vị trí các joints
+        joint_state.position = [
+            self.steering_angle,       # steering_wheel_joint
+            self.steering_angle,       # front_left_steering_joint
+            self.steering_angle,       # front_right_steering_joint
+            self.wheel_position,       # front_left_wheel_joint
+            self.wheel_position,       # front_right_wheel_joint
+            self.wheel_position,       # rear_left_wheel_joint
+            self.wheel_position        # rear_right_wheel_joint
+        ]
+
+        # Vận tốc các joints
+        joint_state.velocity = [
+            0.0,                       # steering_wheel_joint
+            0.0,                       # front_left_steering_joint
+            0.0,                       # front_right_steering_joint
+            wheel_angular_velocity,    # front_left_wheel_joint
+            wheel_angular_velocity,    # front_right_wheel_joint
+            wheel_angular_velocity,    # rear_left_wheel_joint
+            wheel_angular_velocity     # rear_right_wheel_joint
+        ]
+
+        # Publish
+        self.joint_state_pub.publish(joint_state)
+
     def euler_to_quaternion(self, roll, pitch, yaw):
         """Chuyển đổi Euler angles (roll, pitch, yaw) sang Quaternion"""
         q = Quaternion()
