@@ -36,7 +36,7 @@ const int SERVO_MIN = SERVO_CENTER - 30;  // Góc tối thiểu (60 độ)
 const int SERVO_MAX = SERVO_CENTER + 30;  // Góc tối đa (120 độ)
 
 // Tham số motor PWM
-const int MOTOR_MIN_PWM = 0;
+const int MOTOR_MIN_PWM = 153;  // 60% tốc độ tối thiểu
 const int MOTOR_MAX_PWM = 255;
 const float MAX_LINEAR_VELOCITY = 1.0;  // Tốc độ tối đa (m/s)
 
@@ -239,12 +239,15 @@ void controlMotors(float linear_velocity) {
   // Tính tốc độ góc bánh xe (rad/s)
   float wheel_angular_velocity = linear_velocity / WHEEL_RADIUS;
   
-  // Chuyển đổi sang PWM (0-255)
+  // Chuyển đổi sang PWM (MOTOR_MIN_PWM đến MOTOR_MAX_PWM)
   // Giả sử max angular velocity = MAX_LINEAR_VELOCITY / WHEEL_RADIUS
   float max_wheel_angular = MAX_LINEAR_VELOCITY / WHEEL_RADIUS;
-  float normalized = wheel_angular_velocity / max_wheel_angular;
-  int pwm_value = abs(normalized * MOTOR_MAX_PWM);
-  
+  float normalized = abs(wheel_angular_velocity / max_wheel_angular);
+  normalized = constrain(normalized, 0.0, 1.0);
+
+  // Map từ 60% (153) đến 100% (255)
+  int pwm_value = MOTOR_MIN_PWM + (int)(normalized * (MOTOR_MAX_PWM - MOTOR_MIN_PWM));
+
   // Giới hạn PWM
   pwm_value = constrain(pwm_value, MOTOR_MIN_PWM, MOTOR_MAX_PWM);
   

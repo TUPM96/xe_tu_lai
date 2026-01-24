@@ -23,7 +23,7 @@ class AutonomousDrive(Node):
         # Note: use_sim_time is set by launch file, don't declare it here
         self.declare_parameter('min_distance', 0.5)  # Khoảng cách tối thiểu để dừng (m)
         self.declare_parameter('safe_distance', 0.8)  # Khoảng cách an toàn để tránh (m)
-        self.declare_parameter('max_linear_speed', 0.3)  # Tốc độ tối đa (m/s)
+        self.declare_parameter('max_linear_speed', 1.0)  # Tốc độ tối đa (m/s) - PWM 255
         self.declare_parameter('max_angular_speed', 1.0)  # Tốc độ quay tối đa (rad/s)
         self.declare_parameter('front_angle_range', 60)  # Góc phía trước để kiểm tra (degrees)
         self.declare_parameter('use_camera', True)  # Sử dụng camera hay không
