@@ -44,6 +44,11 @@ install(PROGRAMS
   scripts/obstacle_avoidance.py
   scripts/arduino_bridge.py
   scripts/camera_node.py
+  scripts/start_lidar.py
+  scripts/start_camera.py
+  scripts/start_arduino.py
+  scripts/start_autonomous.py
+  scripts/start_all.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -52,6 +57,11 @@ install(PROGRAMS
   scripts/obstacle_avoidance.py
   scripts/arduino_bridge.py
   scripts/camera_node.py
+  scripts/start_lidar.py
+  scripts/start_camera.py
+  scripts/start_arduino.py
+  scripts/start_autonomous.py
+  scripts/start_all.py
   DESTINATION libexec/${PROJECT_NAME}
 )
 
