@@ -205,7 +205,7 @@ class AutonomousDrive(Node):
         return img_msg
     
     def process_camera_lane_detection(self, image):
-        """Xu ly camera de phat hien 2 vach trang 2 ben duong va dieu chinh di giua duong"""
+        """Xu ly camera de phat hien 2 vach DEN 2 ben duong va dieu chinh di giua duong"""
         if image is None:
             return
         
@@ -243,11 +243,12 @@ class AutonomousDrive(Node):
             # Phat hien canh bang Canny
             edges = cv2.Canny(blurred, 50, 150)
             
-            # Phat hien duong thang bang HoughLinesP
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=30, 
-                                   minLineLength=20, maxLineGap=15)
-            
+            # Phat hien duong thang bang HoughLinesP (giam threshold de detect duoc nhieu hon)
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20,
+                                   minLineLength=30, maxLineGap=20)
+
             # Phan loai duong thang thanh ben trai va ben phai
+            # Phan loai don gian: dua tren vi tri x cua duong (khong can slope)
             left_lines = []
             right_lines = []
             center_x = width / 2
@@ -257,21 +258,23 @@ class AutonomousDrive(Node):
             if lines is not None and len(lines) > 0:
                 for line in lines:
                     x1, y1, x2, y2 = line[0]
-                    # Tinh goc va diem giua cua duong thang
-                    if x2 != x1:
-                        slope = (y2 - y1) / (x2 - x1)
-                        mid_x = (x1 + x2) / 2
+                    mid_x = (x1 + x2) / 2
 
-                        # QUAN TRONG: Trong he toa do anh, Y tang tu tren xuong
-                        # Vach ben TRAI: tu tren-trai xuong duoi-phai → slope DUONG (y↑, x↑)
-                        # Vach ben PHAI: tu tren-phai xuong duoi-trai → slope AM (y↑, x↓)
-                        if slope > 0.2 and mid_x < center_x:  # Duong ben trai (slope duong, ben trai man hinh)
+                    # Tinh slope (xu ly truong hop duong thang dung)
+                    if abs(x2 - x1) < 1:
+                        slope = 999  # Duong gan nhu thang dung
+                    else:
+                        slope = (y2 - y1) / (x2 - x1)
+
+                    # Chi nhan cac duong co do nghieng lon (gan thang dung)
+                    # |slope| > 0.5 hoac duong thang dung
+                    if abs(slope) > 0.5 or abs(slope) == 999:
+                        # Phan loai theo vi tri x
+                        if mid_x < center_x:  # Duong ben trai
                             left_lines.append(line[0])
-                            # Ve vach ben trai mau xanh (day hon de thay ro)
                             cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (255, 0, 0), 3)
-                        elif slope < -0.2 and mid_x > center_x:  # Duong ben phai (slope am, ben phai man hinh)
+                        else:  # Duong ben phai
                             right_lines.append(line[0])
-                            # Ve vach ben phai mau do (day hon de thay ro)
                             cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (0, 0, 255), 3)
             
             # Tinh diem trung binh cua cac duong o duoi cung cua ROI
