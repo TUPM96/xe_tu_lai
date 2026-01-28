@@ -19,8 +19,8 @@ def main():
                         help='Tat debug output')
     parser.add_argument('--roi-top', type=float, default=0.4,
                         help='ROI bat dau tu %% chieu cao (default: 0.4)')
-    parser.add_argument('--lane-width', type=int, default=400,
-                        help='Khoang cach uoc tinh giua 2 vach (pixels, default: 400 cho HD)')
+    parser.add_argument('--lane-width', type=int, default=200,
+                        help='Khoang cach uoc tinh giua 2 vach (pixels, default: 200)')
     parser.add_argument('--full-image', action='store_true',
                         help='Dung full anh camera (khong crop ROI)')
     args = parser.parse_args()

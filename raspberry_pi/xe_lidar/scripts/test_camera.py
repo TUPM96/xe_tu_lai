@@ -9,7 +9,7 @@ import sys
 import argparse
 
 
-def test_camera(device=0, width=1280, height=720):
+def test_camera(device=0, width=640, height=480):
     """
     Test camera với OpenCV
     
@@ -34,10 +34,6 @@ def test_camera(device=0, width=1280, height=720):
         print(f"   - Quyền truy cập: sudo chmod 777 /dev/video{device}")
         print(f"   - Device ID đúng chưa? (ls /dev/video*)")
         return False
-    
-    # Dùng MJPG codec để hỗ trợ HD resolution
-    fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
-    cap.set(cv2.CAP_PROP_FOURCC, fourcc)
     
     # Đặt kích thước
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -96,10 +92,10 @@ def main():
     parser = argparse.ArgumentParser(description='Test Camera trên Raspberry Pi')
     parser.add_argument('--device', type=int, default=0,
                        help='Device ID của camera (mặc định: 0)')
-    parser.add_argument('--width', type=int, default=1280,
-                       help='Chiều rộng ảnh (mặc định: 1280)')
-    parser.add_argument('--height', type=int, default=720,
-                       help='Chiều cao ảnh (mặc định: 720)')
+    parser.add_argument('--width', type=int, default=640,
+                       help='Chiều rộng ảnh (mặc định: 640)')
+    parser.add_argument('--height', type=int, default=480,
+                       help='Chiều cao ảnh (mặc định: 480)')
     
     args = parser.parse_args()
     

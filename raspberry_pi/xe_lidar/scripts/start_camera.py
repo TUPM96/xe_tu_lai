@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script khoi dong Camera rieng
-Su dung: python3 start_camera.py [--device /dev/video0] [--width 1280] [--height 720] [--fps 30]
+Su dung: python3 start_camera.py [--device /dev/video0] [--width 640] [--height 480] [--fps 30]
 """
 
 import subprocess
@@ -13,8 +13,8 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description='Khoi dong Camera')
     parser.add_argument('--device', default='/dev/video0', help='Video device')
-    parser.add_argument('--width', type=int, default=1280, help='Chieu rong anh (default: 1280)')
-    parser.add_argument('--height', type=int, default=720, help='Chieu cao anh (default: 720)')
+    parser.add_argument('--width', type=int, default=640, help='Chieu rong anh (default: 640)')
+    parser.add_argument('--height', type=int, default=480, help='Chieu cao anh (default: 480)')
     parser.add_argument('--fps', type=int, default=30, help='Frame per second')
     args = parser.parse_args()
 

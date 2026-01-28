@@ -16,10 +16,10 @@ class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
-        # Parameters - Mặc định 1280x720 (HD)
+        # Parameters - Mặc định 640x480 (VGA)
         self.declare_parameter('video_device', '/dev/video0')
-        self.declare_parameter('width', 1280)
-        self.declare_parameter('height', 720)
+        self.declare_parameter('width', 640)
+        self.declare_parameter('height', 480)
         self.declare_parameter('fps', 30)
         self.declare_parameter('frame_id', 'camera_link_optical')
 
@@ -31,16 +31,12 @@ class CameraNode(Node):
 
         self.get_logger().info(f'Dang mo camera {video_device} voi width={width}, height={height}, fps={fps}')
 
-        # Mở camera
-        self.cap = cv2.VideoCapture(video_device)
+        # Mở camera với V4L2 backend
+        self.cap = cv2.VideoCapture(video_device, cv2.CAP_V4L2)
 
         if not self.cap.isOpened():
             self.get_logger().error(f'Khong the mo camera tai {video_device}')
             sys.exit(1)
-
-        # Dùng MJPG codec để hỗ trợ HD resolution (YUYV chỉ hỗ trợ 640x480)
-        fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
-        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
 
         # Set resolution và fps
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -137,7 +133,15 @@ class CameraNode(Node):
 
     def timer_callback(self):
         ret, frame = self.cap.read()
-        if ret:
+        if ret and frame is not None:
+            # Kiểm tra frame có hợp lệ không (tránh corrupt JPEG)
+            if frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
+                return  # Bỏ qua frame corrupt
+            
+            # Kiểm tra kích thước frame đúng không
+            if frame.shape[0] != self.height or frame.shape[1] != self.width:
+                return  # Bỏ qua frame sai kích thước
+            
             try:
                 # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
                 ros_image = self.cv2_to_imgmsg(frame, "bgr8")
@@ -152,7 +156,7 @@ class CameraNode(Node):
                 self.camera_info.header.stamp = current_time
                 self.camera_info_publisher.publish(self.camera_info)
             except Exception as e:
-                self.get_logger().error(f'Loi convert anh: {str(e)}')
+                pass  # Bỏ qua lỗi corrupt frame, không log để tránh spam
 
     def destroy_node(self):
         if self.cap:

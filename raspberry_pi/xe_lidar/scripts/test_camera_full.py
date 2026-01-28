@@ -121,7 +121,7 @@ def detect_lanes(image, roi_top=0.4):
                     (0, 255, 255), 2)
         elif left_x_points:
             left_x_avg = np.mean(left_x_points)
-            lane_center = left_x_avg + 400  # HD resolution
+            lane_center = left_x_avg + 200
             lane_center_offset = (lane_center - center_x) / (width / 2)
             lane_detected = True
             cv2.line(image_with_lanes, 
@@ -130,7 +130,7 @@ def detect_lanes(image, roi_top=0.4):
                     (255, 0, 0), 3)
         elif right_x_points:
             right_x_avg = np.mean(right_x_points)
-            lane_center = right_x_avg - 400  # HD resolution
+            lane_center = right_x_avg - 200
             lane_center_offset = (lane_center - center_x) / (width / 2)
             lane_detected = True
             cv2.line(image_with_lanes, 
@@ -153,7 +153,7 @@ def detect_lanes(image, roi_top=0.4):
     return image_with_lanes, lane_center_offset, lane_detected
 
 
-def test_camera_full(device=0, width=1280, height=720, enable_lane_detection=True):
+def test_camera_full(device=0, width=640, height=480, enable_lane_detection=True):
     """
     Test camera đầy đủ với lane detection
     """
@@ -170,10 +170,6 @@ def test_camera_full(device=0, width=1280, height=720, enable_lane_detection=Tru
     if not cap.isOpened():
         print(f"❌ Không thể mở camera /dev/video{device}")
         return False
-    
-    # Dùng MJPG codec để hỗ trợ HD resolution
-    fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
-    cap.set(cv2.CAP_PROP_FOURCC, fourcc)
     
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
@@ -269,10 +265,10 @@ def main():
     parser = argparse.ArgumentParser(description='Test Camera đầy đủ với Lane Detection')
     parser.add_argument('--device', type=int, default=0,
                        help='Device ID camera (mặc định: 0)')
-    parser.add_argument('--width', type=int, default=1280,
-                       help='Chiều rộng (mặc định: 1280)')
-    parser.add_argument('--height', type=int, default=720,
-                       help='Chiều cao (mặc định: 720)')
+    parser.add_argument('--width', type=int, default=640,
+                       help='Chiều rộng (mặc định: 640)')
+    parser.add_argument('--height', type=int, default=480,
+                       help='Chiều cao (mặc định: 480)')
     parser.add_argument('--no-lane', action='store_true',
                        help='Tắt lane detection')
     
