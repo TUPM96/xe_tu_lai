@@ -339,57 +339,92 @@ class AutonomousDrive(Node):
                                [c + np.array([[0, roi_top]]) for c in right_contours],
                                -1, (0, 0, 255), cv2.FILLED)
 
-            # Tim diem duoi cung (gan camera nhat) cua moi ben
-            left_bottom_x = None
-            right_bottom_x = None
-
-            # Tim diem duoi cung cua vach trai
-            if left_contours:
-                all_left_points = np.vstack(left_contours)
-                # Tim diem co y lon nhat (gan duoi nhat trong ROI)
-                bottom_y = np.max(all_left_points[:, :, 1])
-                # Lay cac diem o hang duoi cung (trong khoang 20 pixel)
-                bottom_points = all_left_points[all_left_points[:, :, 1] >= bottom_y - 20]
-                if len(bottom_points) > 0:
-                    # Lay trung binh x cua cac diem duoi cung
-                    left_bottom_x = np.mean(bottom_points[:, 0])
-
-            # Tim diem duoi cung cua vach phai
-            if right_contours:
-                all_right_points = np.vstack(right_contours)
-                bottom_y = np.max(all_right_points[:, :, 1])
-                bottom_points = all_right_points[all_right_points[:, :, 1] >= bottom_y - 20]
-                if len(bottom_points) > 0:
-                    right_bottom_x = np.mean(bottom_points[:, 0])
-
-            # Tinh lane center va offset
-            lane_center = None
-            if left_bottom_x is not None and right_bottom_x is not None:
-                # Co ca 2 vach - tinh trung diem
-                lane_center = (left_bottom_x + right_bottom_x) / 2
+            # Tính toán lane center tại nhiều điểm dọc theo vạch kẻ đường để phản ánh độ cong
+            # Chia ROI thành nhiều vùng ngang để tính midpoint tại mỗi vùng
+            num_horizontal_zones = 5  # Chia thành 5 vùng từ dưới lên trên
+            lane_centers = []  # Lưu các midpoint tại các vùng khác nhau
+            lane_center = None  # Lane center cuối cùng để hiển thị
+            
+            # Tính midpoint tại mỗi vùng ngang
+            for zone_idx in range(num_horizontal_zones):
+                zone_top = int(roi_height * (zone_idx / num_horizontal_zones))
+                zone_bottom = int(roi_height * ((zone_idx + 1) / num_horizontal_zones))
+                
+                left_x_in_zone = None
+                right_x_in_zone = None
+                
+                # Tìm điểm x của vạch trái trong vùng này
+                if left_contours:
+                    all_left_points = np.vstack(left_contours)
+                    zone_left_points = all_left_points[
+                        (all_left_points[:, :, 1] >= zone_top) & 
+                        (all_left_points[:, :, 1] < zone_bottom)
+                    ]
+                    if len(zone_left_points) > 0:
+                        # Lấy trung bình x của các điểm trong vùng này
+                        left_x_in_zone = np.mean(zone_left_points[:, 0])
+                
+                # Tìm điểm x của vạch phải trong vùng này
+                if right_contours:
+                    all_right_points = np.vstack(right_contours)
+                    zone_right_points = all_right_points[
+                        (all_right_points[:, :, 1] >= zone_top) & 
+                        (all_right_points[:, :, 1] < zone_bottom)
+                    ]
+                    if len(zone_right_points) > 0:
+                        right_x_in_zone = np.mean(zone_right_points[:, 0])
+                
+                # Tính midpoint tại vùng này nếu có cả 2 vạch
+                if left_x_in_zone is not None and right_x_in_zone is not None:
+                    zone_center = (left_x_in_zone + right_x_in_zone) / 2
+                    zone_y = (zone_top + zone_bottom) / 2 + roi_top  # Y trong toàn bộ ảnh
+                    lane_centers.append((zone_center, zone_y))
+                elif left_x_in_zone is not None:
+                    # Chỉ có vạch trái - ước tính
+                    estimated_lane_width = 200  # pixels
+                    zone_center = left_x_in_zone + estimated_lane_width
+                    zone_y = (zone_top + zone_bottom) / 2 + roi_top
+                    lane_centers.append((zone_center, zone_y))
+                elif right_x_in_zone is not None:
+                    # Chỉ có vạch phải - ước tính
+                    estimated_lane_width = 200  # pixels
+                    zone_center = right_x_in_zone - estimated_lane_width
+                    zone_y = (zone_top + zone_bottom) / 2 + roi_top
+                    lane_centers.append((zone_center, zone_y))
+            
+            # Tính lane center và offset từ các điểm đã tìm được
+            if len(lane_centers) > 0:
+                # Ưu tiên điểm ở giữa ROI (vùng 2 và 3) để tính offset chính xác hơn
+                # Hoặc có thể dùng trung bình có trọng số (điểm gần camera có trọng số cao hơn)
+                mid_zones = [i for i in range(len(lane_centers)) if i >= len(lane_centers) // 3 and i <= 2 * len(lane_centers) // 3]
+                if mid_zones:
+                    # Dùng các điểm ở giữa để tính offset
+                    selected_centers = [lane_centers[i][0] for i in mid_zones]
+                    lane_center = np.mean(selected_centers)
+                else:
+                    # Dùng tất cả các điểm
+                    lane_center = np.mean([lc[0] for lc in lane_centers])
+                
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-            elif left_bottom_x is not None:
-                # Chi co vach trai - uoc tinh lane center
-                lane_center = left_bottom_x + 200  # Gia su lane rong 400px
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)
-                self.lane_detected = True
-            elif right_bottom_x is not None:
-                # Chi co vach phai - uoc tinh lane center
-                lane_center = right_bottom_x - 200
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)
-                self.lane_detected = True
+                
+                # Vẽ đường midpoint cong lên ảnh để debug
+                if len(lane_centers) > 1:
+                    points = np.array([[int(lc[0]), int(lc[1])] for lc in lane_centers], np.int32)
+                    cv2.polylines(image_with_lanes, [points], False, (0, 255, 255), 3)
             else:
                 self.lane_detected = False
                 self.lane_center_offset = 0.0
 
-            # Ve duong giua man hinh (xanh la) va lane center (vang)
+            # Ve duong giua man hinh (xanh la)
             cv2.line(image_with_lanes, (int(center_x), height),
                     (int(center_x), roi_top), (0, 255, 0), 2)
 
-            if lane_center is not None:
+            # Lane center đã được vẽ bằng polylines ở trên nếu có nhiều điểm
+            # Vẽ thêm điểm lane center tại vị trí hiện tại (nếu có)
+            if self.lane_detected and lane_center is not None:
                 cv2.line(image_with_lanes, (int(lane_center), height),
-                        (int(lane_center), roi_top), (0, 255, 255), 3)
+                        (int(lane_center), roi_top), (0, 255, 255), 2)
 
             # Ap dung bo loc lam muot (exponential moving average)
             alpha = self.lane_offset_smoothing
@@ -401,8 +436,8 @@ class AutonomousDrive(Node):
             
             # Ve text thong tin
             status_text = "LANE OK" if self.lane_detected else "NO LANE"
-            left_text = f"L:{left_bottom_x:.0f}" if left_bottom_x else "L:--"
-            right_text = f"R:{right_bottom_x:.0f}" if right_bottom_x else "R:--"
+            left_text = f"L:{len(left_contours)}" if left_contours else "L:--"
+            right_text = f"R:{len(right_contours)}" if right_contours else "R:--"
             offset_text = f"Raw:{self.lane_center_offset:.2f} Smooth:{self.smoothed_lane_offset:.2f}"
             servo_text = f"Servo: {self.smoothed_servo_angle_deg:.1f}°"
             contour_count_text = f"Contours: {len(valid_contours)} (L:{len(left_contours)} R:{len(right_contours)})"
