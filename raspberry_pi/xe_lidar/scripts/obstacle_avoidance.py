@@ -416,15 +416,8 @@ class AutonomousDrive(Node):
                 self.lane_detected = False
                 self.lane_center_offset = 0.0
 
-            # Ve duong giua man hinh (xanh la)
-            cv2.line(image_with_lanes, (int(center_x), height),
-                    (int(center_x), roi_top), (0, 255, 0), 2)
-
-            # Lane center đã được vẽ bằng polylines ở trên nếu có nhiều điểm
-            # Vẽ thêm điểm lane center tại vị trí hiện tại (nếu có)
-            if self.lane_detected and lane_center is not None:
-                cv2.line(image_with_lanes, (int(lane_center), height),
-                        (int(lane_center), roi_top), (0, 255, 255), 2)
+            # Chỉ vẽ đường trung điểm cong (polylines) - không vẽ đường thẳng
+            # Đường trung điểm cong đã được vẽ ở trên bằng polylines màu vàng
 
             # Ap dung bo loc lam muot (exponential moving average)
             alpha = self.lane_offset_smoothing
@@ -438,17 +431,30 @@ class AutonomousDrive(Node):
             status_text = "LANE OK" if self.lane_detected else "NO LANE"
             left_text = f"L:{len(left_contours)}" if left_contours else "L:--"
             right_text = f"R:{len(right_contours)}" if right_contours else "R:--"
-            offset_text = f"Raw:{self.lane_center_offset:.2f} Smooth:{self.smoothed_lane_offset:.2f}"
+            offset_text = f"Raw:{self.lane_center_offset:.3f} Smooth:{self.smoothed_lane_offset:.3f}"
             servo_text = f"Servo: {self.smoothed_servo_angle_deg:.1f}°"
             contour_count_text = f"Contours: {len(valid_contours)} (L:{len(left_contours)} R:{len(right_contours)})"
+            
+            # Tính error để hiển thị
+            if self.lane_detected:
+                raw_error = -self.smoothed_lane_offset
+                if abs(raw_error) < self.lane_dead_zone:
+                    error_display = raw_error * (abs(raw_error) / self.lane_dead_zone) if self.lane_dead_zone > 0 else raw_error
+                else:
+                    error_display = raw_error
+                error_text = f"Error: {error_display:.3f} (DeadZone: {self.lane_dead_zone:.2f})"
+            else:
+                error_text = "Error: --"
 
             cv2.putText(image_with_lanes, f"{status_text} | {left_text} | {right_text}", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             cv2.putText(image_with_lanes, offset_text, (10, 60),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.putText(image_with_lanes, servo_text, (10, 90),
+            cv2.putText(image_with_lanes, error_text, (10, 90),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+            cv2.putText(image_with_lanes, servo_text, (10, 120),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-            cv2.putText(image_with_lanes, contour_count_text, (10, 120),
+            cv2.putText(image_with_lanes, contour_count_text, (10, 150),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
             
             # Vẽ mask để debug (hiển thị ở góc trên bên phải)
@@ -490,10 +496,10 @@ class AutonomousDrive(Node):
                     direction_text = f"RE TRAI ({servo_offset_from_center:.1f}°)"
                     direction_color = (255, 165, 0)
 
-                cv2.putText(image_with_lanes, direction_text, (10, 150),
+                cv2.putText(image_with_lanes, direction_text, (10, 180),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, direction_color, 2)
             else:
-                cv2.putText(image_with_lanes, "KHONG THAY LANE", (10, 150),
+                cv2.putText(image_with_lanes, "KHONG THAY LANE", (10, 180),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             # Publish anh da ve
@@ -536,6 +542,13 @@ class AutonomousDrive(Node):
         
         # Tổng PID output (normalized từ -1.0 đến 1.0)
         pid_output = p_term + i_term + d_term
+        
+        # Đảm bảo PID output có đủ độ lớn để điều khiển servo
+        # Nếu error nhỏ nhưng không zero, vẫn cần có output nhỏ
+        if abs(error) > 0.001 and abs(pid_output) < 0.01:
+            # Tăng độ nhạy cho error nhỏ
+            pid_output = pid_output * 10.0
+        
         pid_output = max(-1.0, min(1.0, pid_output))  # Clamp
         
         # Chuyển đổi sang góc servo
@@ -607,11 +620,15 @@ class AutonomousDrive(Node):
                 # Tính toán error từ lane offset
                 # smoothed_lane_offset: âm = lệch trái, dương = lệch phải
                 # error cho PID: dương = cần rẽ phải, âm = cần rẽ trái
-                error = -self.smoothed_lane_offset  # Đảo dấu để phù hợp với PID
+                raw_error = -self.smoothed_lane_offset  # Đảo dấu để phù hợp với PID
                 
-                # Áp dụng dead zone
-                if abs(error) < self.lane_dead_zone:
-                    error = 0.0
+                # Áp dụng dead zone - nhưng KHÔNG zero error, chỉ giảm độ nhạy
+                # Dead zone chỉ làm giảm error nhỏ, không loại bỏ hoàn toàn
+                if abs(raw_error) < self.lane_dead_zone:
+                    # Giảm error nhưng không zero để PID vẫn hoạt động
+                    error = raw_error * (abs(raw_error) / self.lane_dead_zone) if self.lane_dead_zone > 0 else raw_error
+                else:
+                    error = raw_error
                 
                 # Tính góc servo từ PID
                 target_servo_angle = self.calculate_servo_angle_from_pid(error, dt)
@@ -655,7 +672,8 @@ class AutonomousDrive(Node):
                         direction_str = f"RE TRAI ({servo_offset:.1f}°)"
                     
                     self.get_logger().info(
-                        f'📷 Lane - Error: {error:.3f}, Servo: {self.smoothed_servo_angle_deg:.1f}°, '
+                        f'📷 Lane - RawOffset: {self.smoothed_lane_offset:.3f}, RawError: {raw_error:.3f}, '
+                        f'Error: {error:.3f}, Servo: {self.smoothed_servo_angle_deg:.1f}°, '
                         f'{direction_str}, Speed: {cmd.linear.x:.2f} m/s'
                     )
                     self.last_lane_log_time = current_time
