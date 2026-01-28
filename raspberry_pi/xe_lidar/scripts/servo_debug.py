@@ -48,10 +48,13 @@ def main():
     print(f"Port: {port}")
     print()
     print("Lệnh:")
-    print("  <số>        Ví dụ: 88   -> Đẩy servo tới 88 độ (S:88)")
-    print("  c <số>      Ví dụ: c 88 -> Đặt 88 làm góc mặc định (C:88)")
+    print("  <số>        VD: 88   -> Đẩy servo tới 88° và GIỮ (S:88)")
+    print("  c <số>      VD: c 88 -> Đặt 88 làm góc mặc định (C:88), dùng khi đã thấy thẳng")
     print("  + / -       Tăng/giảm 1 độ so với góc hiện tại")
     print("  q           Thoát")
+    print()
+    print("Căn chỉnh chuẩn: Thử S:85, S:86, ... hoặc +/– đến khi bánh thẳng,")
+    print("                 rồi gõ c <số_độ> (VD: c 88) để set mặc định.")
     print("=" * 55)
 
     try:

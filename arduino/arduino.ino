@@ -51,6 +51,9 @@ float current_angular = 0.0;
 unsigned long last_command_time = 0;
 const unsigned long COMMAND_TIMEOUT = 500;  // Timeout 500ms nếu không nhận lệnh
 
+// Debug servo: S:angle giữ servo tại góc, không cho cmd_vel ghi đè. -1 = tắt giữ.
+int debug_servo_angle = -1;
+
 // Buffer để nhận dữ liệu Serial
 String inputString = "";
 boolean stringComplete = false;
@@ -153,20 +156,22 @@ void parseCommand(String cmd) {
       current_angular = constrain(current_angular, -1.0, 1.0);
       
       last_command_time = millis();
+      debug_servo_angle = -1;  // Khi co cmd_vel thi tat che do giu debug
     }
   }
-  // Debug: "S:angle" - set servo truc tiep (do)
+  // Debug: "S:angle" - set servo truc tiep va GIU tai do (cmd_vel khong ghi de)
   else if (cmd.startsWith("S:")) {
     int angle = cmd.substring(2).toInt();
-    angle = constrain(angle, 0, 180);
-    steering_servo.write(angle);
-    Serial.print("Servo set: ");
-    Serial.println(angle);
+    debug_servo_angle = constrain(angle, 0, 180);
+    steering_servo.write(debug_servo_angle);
+    Serial.print("Servo set (giu): ");
+    Serial.println(debug_servo_angle);
   }
-  // Set góc mặc định: "C:angle" - angle la do, dung lam "thang"
+  // Set góc mặc định: "C:angle" - angle la do, dung lam "thang", tat giu debug
   else if (cmd.startsWith("C:")) {
     int angle = cmd.substring(2).toInt();
     servo_center = constrain(angle, 0, 180);
+    debug_servo_angle = -1;  // Tat giu, tu gio dung servo_center
     steering_servo.write(servo_center);
     Serial.print("Servo center (mac dinh) = ");
     Serial.println(servo_center);
@@ -175,13 +180,15 @@ void parseCommand(String cmd) {
 
 // ==================== CẬP NHẬT ĐIỀU KHIỂN ====================
 void updateControl() {
-  // Tính góc quay cho bánh lái (Ackermann steering)
-  float steering_angle = calculateSteeringAngle(current_angular);
+  // Neu dang giu debug (S:angle) thi chi ghi servo, khong dung cmd_vel
+  if (debug_servo_angle >= 0) {
+    steering_servo.write(debug_servo_angle);
+  } else {
+    float steering_angle = calculateSteeringAngle(current_angular);
+    controlSteering(steering_angle);
+  }
   
-  // Điều khiển servo
-  controlSteering(steering_angle);
-  
-  // Điều khiển motor
+  // Motor van theo cmd_vel
   controlMotors(current_linear);
 }
 

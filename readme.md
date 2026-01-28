@@ -164,12 +164,12 @@ python3 servo_debug.py /dev/ttyACM0
 ```
 
 **Lệnh trong script:**
-- Nhập **số độ** (vd: `88`) → servo quay tới góc đó (đẩy góc xuống/thử từng độ).
-- **`c 88`** → đặt **88** làm **góc mặc định** (center). Từ giờ “thẳng” = 88° cho tới khi tắt nguồn Arduino.
-- **`+` / `-`** → tăng/giảm 1 độ so với góc hiện tại.
+- **`<số>`** (vd: `88`) → đẩy servo tới góc đó và **giữ** tại đó (S:88). Dùng để thử từng độ.
+- **`c <số>`** (vd: `c 88`) → đặt **88** làm **góc mặc định** (center). Từ giờ “thẳng” = 88° cho tới khi tắt nguồn Arduino.
+- **`+` / `-`** → tăng/giảm 1° so với góc hiện tại (cũng giữ tại góc mới).
 - **`q`** → thoát.
 
-**Quy trình:** Thử lần lượt 88, 89, 90… hoặc dùng `+`/`-` cho tới khi bánh lái thẳng, rồi gõ `c <số_độ>` để set mặc định. Muốn giữ lâu dài thì sửa `SERVO_CENTER_DEFAULT` trong `arduino/arduino.ino` và nạp lại firmware.
+**Căn chỉnh chuẩn:** Dùng **S:** (hoặc `+`/`-`) thử 85, 86, 87… đến khi bánh lái thẳng → gõ **`c <số_độ>`** (vd: `c 88`) để set mặc định. Khi gửi **V:** (cmd_vel) từ ROS/điều khiển, Arduino sẽ dùng lại góc mặc định đã set. Muốn lưu vĩnh viễn thì sửa `SERVO_CENTER_DEFAULT` trong `arduino/arduino.ino` và nạp lại firmware.
 
 ### Test Motor DC (Tiến/Lùi)
 
