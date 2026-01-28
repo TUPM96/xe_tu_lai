@@ -486,14 +486,16 @@ class AutonomousDrive(Node):
                                    (0, 255, 255), 5, tipLength=0.3)
 
                 # Text huong di - dựa trên góc servo thực tế
+                # servo_offset_from_center < 0: góc nhỏ hơn center -> rẽ trái
+                # servo_offset_from_center > 0: góc lớn hơn center -> rẽ phải
                 if abs(servo_offset_from_center) < 2.0:  # Gần góc giữa
                     direction_text = "DI THANG"
                     direction_color = (0, 255, 0)
-                elif servo_offset_from_center < 0:  # Góc < center -> rẽ phải
-                    direction_text = f"RE PHAI ({abs(servo_offset_from_center):.1f}°)"
+                elif servo_offset_from_center < 0:  # Góc < center -> rẽ trái
+                    direction_text = f"RE TRAI ({abs(servo_offset_from_center):.1f}°)"
                     direction_color = (255, 165, 0)
-                else:  # Góc > center -> rẽ trái
-                    direction_text = f"RE TRAI ({servo_offset_from_center:.1f}°)"
+                else:  # Góc > center -> rẽ phải
+                    direction_text = f"RE PHAI ({servo_offset_from_center:.1f}°)"
                     direction_color = (255, 165, 0)
 
                 cv2.putText(image_with_lanes, direction_text, (10, 180),
@@ -542,6 +544,10 @@ class AutonomousDrive(Node):
         
         # Tổng PID output (normalized từ -1.0 đến 1.0)
         pid_output = p_term + i_term + d_term
+        
+        # Tăng độ nhạy để servo quay mạnh hơn
+        # Nhân với hệ số để tăng phản ứng của servo
+        pid_output = pid_output * 1.5  # Tăng 50% độ nhạy
         
         # Đảm bảo PID output có đủ độ lớn để điều khiển servo
         # Nếu error nhỏ nhưng không zero, vẫn cần có output nhỏ
@@ -667,9 +673,9 @@ class AutonomousDrive(Node):
                     if abs(servo_offset) < 2.0:
                         direction_str = "DI THANG"
                     elif servo_offset < 0:
-                        direction_str = f"RE PHAI ({abs(servo_offset):.1f}°)"
+                        direction_str = f"RE TRAI ({abs(servo_offset):.1f}°)"
                     else:
-                        direction_str = f"RE TRAI ({servo_offset:.1f}°)"
+                        direction_str = f"RE PHAI ({servo_offset:.1f}°)"
                     
                     self.get_logger().info(
                         f'📷 Lane - RawOffset: {self.smoothed_lane_offset:.3f}, RawError: {raw_error:.3f}, '
