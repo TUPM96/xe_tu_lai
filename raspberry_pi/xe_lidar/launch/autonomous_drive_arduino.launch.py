@@ -146,7 +146,11 @@ def generate_launch_description():
             'max_angular_speed': 1.0,
             'front_angle_range': 60,
             'use_camera': True,
-            'camera_topic': '/camera/image_raw'
+            'camera_topic': '/camera/image_raw',
+            # Tham số PID cho bám làn (có thể override khi launch: kp:=..., ki:=..., kd:=...)
+            'kp': 0.5,
+            'ki': 0.0,
+            'kd': 0.0
         }]
     )
     

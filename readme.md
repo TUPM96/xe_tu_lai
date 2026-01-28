@@ -488,7 +488,10 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args \
     -p max_linear_speed:=0.168 \
     -p max_angular_speed:=1.0 \
     -p front_angle_range:=60 \
-    -p use_camera:=true
+    -p use_camera:=true \
+    -p kp:=0.5 \
+    -p ki:=0.0 \
+    -p kd:=0.0
 ```
 
 | Tham số | Mặc định | Mô tả |
@@ -497,6 +500,9 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args \
 | `safe_distance` | 0.8 | Khoảng cách an toàn để tránh (m) |
 | `max_linear_speed` | 0.168 | Tốc độ tối đa (m/s) |
 | `max_angular_speed` | 1.0 | Tốc độ quay tối đa (rad/s) |
+| `kp` | 0.5 | Hệ số P cho bám làn (`angular = kp * error + ...`) |
+| `ki` | 0.0 | Hệ số I cho bám làn (tích phân lỗi, thường để nhỏ hoặc 0) |
+| `kd` | 0.0 | Hệ số D cho bám làn (phản ứng theo tốc độ thay đổi lỗi) |
 | `front_angle_range` | 60 | Góc phát hiện phía trước (degrees) |
 | `use_camera` | true | Bật/tắt camera lane following |
 

@@ -30,6 +30,10 @@ class AutonomousDrive(Node):
         self.declare_parameter('camera_topic', '/camera/image_raw')  # Topic camera
         self.declare_parameter('max_steer_angle', 0.5236)  # Góc lái tối đa (rad) ~30 degrees
         self.declare_parameter('debug_camera', False)  # Hiển thị debug camera output
+        # Tham số PID cho điều khiển bám làn (có thể truyền từ launch / start_autonomous)
+        self.declare_parameter('kp', 0.5)
+        self.declare_parameter('ki', 0.0)
+        self.declare_parameter('kd', 0.0)
         
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -39,6 +43,12 @@ class AutonomousDrive(Node):
         self.use_camera = self.get_parameter('use_camera').value
         self.max_steer_angle = self.get_parameter('max_steer_angle').value
         self.debug_camera = self.get_parameter('debug_camera').value
+        self.kp = float(self.get_parameter('kp').value)
+        self.ki = float(self.get_parameter('ki').value)
+        self.kd = float(self.get_parameter('kd').value)
+        self.lane_error_integral = 0.0
+        self.lane_error_prev = 0.0
+        self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         
         # Subscribers
         self.scan_sub = self.create_subscription(
@@ -415,6 +425,11 @@ class AutonomousDrive(Node):
         - ƯU TIÊN 2 (THẤP - NAVIGATION): Camera để đi đúng làn đường (lane following)
         """
         cmd = Twist()
+
+        # Tính delta thời gian cho PID (giả sử timer 0.1s, nhưng vẫn đo chính xác)
+        now = self.get_clock().now().seconds_nanoseconds()[0]
+        dt = max(0.01, now - getattr(self, "last_control_time", now))
+        self.last_control_time = now
         
         # Xu ly truong hop chua co LiDAR (chay cham de an toan)
         if self.latest_scan is None:
@@ -463,8 +478,26 @@ class AutonomousDrive(Node):
                 # - lane_center_offset < 0: xe lệch TRÁI → cần quay PHẢI (angular.z < 0)
                 # - ROS2 convention: angular.z dương = quay trái, angular.z âm = quay phải
 
-                # Tính angular velocity (KHÔNG có dấu trừ - đã sửa lỗi!)
-                desired_angular = self.lane_center_offset * self.max_angular_speed * 0.8
+                # Bộ điều khiển PID cho bám làn
+                error = float(self.lane_center_offset)
+                # Cộng dồn sai lệch (thành phần I), có giới hạn để tránh bão hòa
+                self.lane_error_integral += error * dt
+                # Giới hạn tích phân để tránh quá lớn
+                self.lane_error_integral = max(-1.0, min(1.0, self.lane_error_integral))
+                # Thành phần đạo hàm
+                derivative = 0.0
+                if dt > 0.0:
+                    derivative = (error - self.lane_error_prev) / dt
+                self.lane_error_prev = error
+
+                # Tính angular theo PID: angular = Kp*e + Ki*∫e dt + Kd*de/dt
+                desired_angular = (
+                    self.kp * error +
+                    self.ki * self.lane_error_integral +
+                    self.kd * derivative
+                )
+                # Giảm nhẹ biên độ theo max_angular_speed
+                desired_angular *= self.max_angular_speed
 
                 # Giới hạn angular velocity theo max_steer_angle của Ackermann
                 # Giả sử wheelbase = 0.4m, vận tốc max = 0.3 m/s

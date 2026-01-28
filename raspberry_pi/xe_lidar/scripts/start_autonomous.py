@@ -16,6 +16,9 @@ def main():
     parser.add_argument('--max-speed', type=float, default=1.0, help='Toc do toi da (m/s)')
     parser.add_argument('--max-angular', type=float, default=1.0, help='Toc do quay toi da (rad/s)')
     parser.add_argument('--safe-distance', type=float, default=0.8, help='Khoang cach an toan (m)')
+    parser.add_argument('--kp', type=float, default=0.5, help='He so PID Kp cho lane following')
+    parser.add_argument('--ki', type=float, default=0.0, help='He so PID Ki cho lane following')
+    parser.add_argument('--kd', type=float, default=0.0, help='He so PID Kd cho lane following')
     args = parser.parse_args()
 
     use_camera = not args.no_camera
@@ -27,6 +30,7 @@ def main():
     print(f"Max Linear Speed: {args.max_speed} m/s")
     print(f"Max Angular Speed: {args.max_angular} rad/s")
     print(f"Safe Distance: {args.safe_distance} m")
+    print(f"Kp / Ki / Kd: {args.kp} / {args.ki} / {args.kd}")
     print("=" * 50)
 
     # Chay ROS2 node
@@ -40,7 +44,10 @@ def main():
         '-p', f'max_angular_speed:={args.max_angular}',
         '-p', 'front_angle_range:=60',
         '-p', f'use_camera:={str(use_camera).lower()}',
-        '-p', 'camera_topic:=/camera/image_raw'
+        '-p', 'camera_topic:=/camera/image_raw',
+        '-p', f'kp:={args.kp}',
+        '-p', f'ki:={args.ki}',
+        '-p', f'kd:={args.kd}'
     ]
 
     try:
