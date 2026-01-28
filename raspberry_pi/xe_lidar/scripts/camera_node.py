@@ -42,6 +42,8 @@ class CameraNode(Node):
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
+        # Buffer size nhỏ để giảm độ trễ và tránh frame cũ
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         # Lấy resolution thực tế từ camera
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
