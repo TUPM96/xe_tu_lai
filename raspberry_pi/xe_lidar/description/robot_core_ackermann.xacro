@@ -26,8 +26,8 @@
     
     <!-- Wheelbase (khoảng cách giữa bánh trước và sau) -->
     <xacro:property name="wheelbase" value="0.4"/>
-    <!-- Track width (khoảng cách giữa 2 bánh trái/phải) -->
-    <xacro:property name="track_width" value="0.28"/>
+    <!-- Track width (khoảng cách giữa 2 bánh trái/phải) - khớp Arduino -->
+    <xacro:property name="track_width" value="0.21"/>
     
     <!-- Steering limits -->
     <xacro:property name="max_steer_angle" value="0.5236"/> <!-- ~30 degrees -->

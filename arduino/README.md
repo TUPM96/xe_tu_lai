@@ -81,10 +81,11 @@ Các tham số này phải **khớp với file URDF** của robot. Nếu robot c
 
 ```cpp
 const float WHEELBASE = 0.4;           // Khoảng cách bánh trước/sau (m)
-const float TRACK_WIDTH = 0.28;        // Khoảng cách bánh trái/phải (m)
+const float TRACK_WIDTH = 0.21;        // Khoảng cách bánh trái/phải (m)
 const float MAX_STEER_ANGLE = 0.5236;  // Góc quay tối đa (rad) ~30 độ
 const float WHEEL_RADIUS = 0.034;      // Bán kính bánh xe (m)
-const int SERVO_CENTER = 90;           // Góc giữa của servo (degrees)
+const int SERVO_CENTER_DEFAULT = 100;  // Góc giữa mặc định của servo (degrees)
+const int SERVO_RANGE = 45;            // ± độ so với center
 const float MAX_LINEAR_VELOCITY = 1.0; // Tốc độ tối đa (m/s)
 ```
 

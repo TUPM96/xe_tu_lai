@@ -26,14 +26,14 @@
 // ==================== THAM SỐ ROBOT ====================
 // Kích thước robot (phải khớp với URDF)
 const float WHEELBASE = 0.4;      // Khoảng cách giữa bánh trước và sau (m)
-const float TRACK_WIDTH = 0.28;   // Khoảng cách giữa 2 bánh trái/phải (m)
+const float TRACK_WIDTH = 0.21;   // Khoảng cách giữa 2 bánh trái/phải (m)
 const float MAX_STEER_ANGLE = 0.5236;  // Góc quay tối đa (rad) ~30 độ
 const float WHEEL_RADIUS = 0.034; // Bán kính bánh xe (m)
 
 // Tham số servo
-const int SERVO_CENTER_DEFAULT = 90;  // Góc giữa mặc định (độ) - co the doi bang lenh C:
+const int SERVO_CENTER_DEFAULT = 100;  // Góc giữa mặc định (độ) - co the doi bang lenh C:
 int servo_center = SERVO_CENTER_DEFAULT;  // Góc mặc định hien tai (co the set bang "C:angle")
-const int SERVO_RANGE = 30;              // ± độ so voi center
+const int SERVO_RANGE = 45;              // ± độ so voi center
 
 // Tham số motor PWM
 const int MOTOR_MIN_PWM = 153;  // 60% tốc độ tối thiểu
