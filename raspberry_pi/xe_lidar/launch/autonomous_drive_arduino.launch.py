@@ -215,6 +215,13 @@ def generate_launch_description():
         description='He so toc do khi di thang (0.0-1.0), vi du 0.7 = 70% toc do toi da khi di thang'
     )
 
+    # Hệ số tốc độ khi rẽ
+    turning_speed_factor_arg = DeclareLaunchArgument(
+        'turning_speed_factor',
+        default_value='0.4',
+        description='He so toc do khi re (0.0-1.0), vi du 0.4 = 40% toc do toi da khi re'
+    )
+
     # Tham số góc servo
     servo_center_angle_arg = DeclareLaunchArgument(
         'servo_center_angle',
@@ -284,6 +291,7 @@ def generate_launch_description():
             'lane_dead_zone': LaunchConfiguration('lane_dead_zone'),
             'cornering_speed_factor': LaunchConfiguration('cornering_speed_factor'),
             'straight_speed_factor': LaunchConfiguration('straight_speed_factor'),
+            'turning_speed_factor': LaunchConfiguration('turning_speed_factor'),
             # Tham số góc servo
             'servo_center_angle': LaunchConfiguration('servo_center_angle'),
             'servo_min_angle': LaunchConfiguration('servo_min_angle'),
@@ -329,6 +337,7 @@ def generate_launch_description():
         kd_arg,
         cornering_speed_factor_arg,
         straight_speed_factor_arg,
+        turning_speed_factor_arg,
         servo_center_angle_arg,
         servo_min_angle_arg,
         servo_max_angle_arg,

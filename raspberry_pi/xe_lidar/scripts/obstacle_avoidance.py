@@ -46,6 +46,8 @@ class AutonomousDrive(Node):
         self.declare_parameter('cornering_speed_factor', 0.6)
         # Hệ số tốc độ khi đi thẳng (0.0 - 1.0), ví dụ 0.7 = 70% tốc độ tối đa khi đi thẳng
         self.declare_parameter('straight_speed_factor', 1.0)
+        # Hệ số tốc độ khi rẽ (0.0 - 1.0), ví dụ 0.4 = 40% tốc độ tối đa khi rẽ
+        self.declare_parameter('turning_speed_factor', 0.4)
         # Tham số góc servo (degree) - giới hạn và góc giữa
         self.declare_parameter('servo_center_angle', 100.0)  # Góc giữa (đi thẳng)
         self.declare_parameter('servo_min_angle', 45.0)      # Góc tối thiểu (rẽ trái tối đa)
@@ -70,6 +72,7 @@ class AutonomousDrive(Node):
         self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
         self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
         self.straight_speed_factor = float(self.get_parameter('straight_speed_factor').value)
+        self.turning_speed_factor = float(self.get_parameter('turning_speed_factor').value)
         self.servo_center_angle = float(self.get_parameter('servo_center_angle').value)
         self.servo_min_angle = float(self.get_parameter('servo_min_angle').value)
         self.servo_max_angle = float(self.get_parameter('servo_max_angle').value)
@@ -595,11 +598,13 @@ class AutonomousDrive(Node):
                     # Áp dụng hệ số tốc độ khi đi thẳng
                     speed_factor = self.straight_speed_factor
                 else:
-                    # Đang vào cua - tính hệ số giảm tốc dựa trên góc lái
-                    cornering_factor = 1.0 - (servo_offset_from_center / max_servo_offset) * (1.0 - self.cornering_speed_factor)
-                    cornering_factor = max(self.cornering_speed_factor, min(1.0, cornering_factor))
-                    # Kết hợp với straight_speed_factor để có tốc độ tối đa khi vào cua
-                    speed_factor = cornering_factor * self.straight_speed_factor
+                    # Đang rẽ - tính hệ số giảm tốc dựa trên góc lái
+                    # Interpolate giữa turning_speed_factor (khi rẽ nhiều) và straight_speed_factor (khi rẽ ít)
+                    normalized_offset = servo_offset_from_center / max_servo_offset  # 0.0 đến 1.0
+                    # Khi rẽ nhiều (normalized_offset = 1.0) -> dùng turning_speed_factor
+                    # Khi rẽ ít (normalized_offset gần 0) -> dùng straight_speed_factor
+                    speed_factor = self.turning_speed_factor + (self.straight_speed_factor - self.turning_speed_factor) * (1.0 - normalized_offset)
+                    speed_factor = max(self.turning_speed_factor, min(self.straight_speed_factor, speed_factor))
                 
                 cmd.linear.x = self.max_linear_speed * speed_factor
                 cmd.angular.z = 0.0  # Không dùng angular, chỉ dùng góc servo trực tiếp
