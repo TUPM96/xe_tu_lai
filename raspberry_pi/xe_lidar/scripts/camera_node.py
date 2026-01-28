@@ -31,12 +31,26 @@ class CameraNode(Node):
 
         self.get_logger().info(f'Dang mo camera {video_device} voi width={width}, height={height}, fps={fps}')
 
-        # Khởi tạo camera - dùng OpenCV mặc định (không ép V4L2)
-        self.cap = cv2.VideoCapture(video_device)
+        # Lấy index từ video device (vd: /dev/video0 -> 0)
+        try:
+            cam_index = int(video_device.replace('/dev/video', ''))
+        except:
+            cam_index = 0
+
+        # Mở camera với V4L2 backend
+        self.cap = cv2.VideoCapture(cam_index, cv2.CAP_V4L2)
 
         if not self.cap.isOpened():
-            self.get_logger().error(f'Không thể mở camera tại {video_device}')
+            self.get_logger().warn(f'V4L2 khong mo duoc, thu path truc tiep...')
+            self.cap = cv2.VideoCapture(video_device)
+
+        if not self.cap.isOpened():
+            self.get_logger().error(f'Khong the mo camera tai {video_device}')
             sys.exit(1)
+
+        # Set MJPG codec TRƯỚC KHI set resolution (bắt buộc cho HD/Full HD)
+        fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
 
         # Set resolution và fps
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -48,7 +62,11 @@ class CameraNode(Node):
         actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
 
-        self.get_logger().info(f'Camera da mo tai {video_device} ({actual_width}x{actual_height} @ {actual_fps}fps)')
+        self.get_logger().info(f'Camera da mo: {actual_width}x{actual_height} @ {actual_fps}fps')
+
+        # Kiểm tra resolution có đúng không
+        if actual_width != width or actual_height != height:
+            self.get_logger().warn(f'Resolution yeu cau: {width}x{height}, thuc te: {actual_width}x{actual_height}')
         
         # Publishers
         self.image_publisher = self.create_publisher(Image, '/camera/image_raw', 10)
