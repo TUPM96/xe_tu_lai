@@ -339,11 +339,17 @@ Sau khi test xong tất cả phần cứng, chạy hệ thống tự lái:
 cd ~/ros2_ws
 source install/setup.bash
 
-# Chạy tất cả: Camera + LiDAR + Arduino + Autonomous Drive
-ros2 launch xe_lidar autonomous_drive_arduino.launch.py
+# Chạy tất cả bằng script
+ros2 run xe_lidar start_all.py
+
+# Hoặc chỉ định port cụ thể
+ros2 run xe_lidar start_all.py \
+    --lidar-port /dev/ttyUSB0 \
+    --arduino-port /dev/ttyACM0 \
+    --camera-device /dev/video0
 ```
 
-**Hoặc chỉ định port cụ thể:**
+**Hoặc dùng launch file:**
 ```bash
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     arduino_serial_port:=/dev/ttyACM0 \
@@ -351,37 +357,68 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     video_device:=/dev/video0
 ```
 
-### Cách 2: Chạy từng phần (Để debug)
+### Cách 2: Chạy từng script riêng lẻ (Khuyến nghị để debug)
+
+Mỗi script chạy trong 1 terminal riêng:
+
+**Terminal 1 - Robot Description (URDF/TF):**
+```bash
+ros2 run xe_lidar start_robot_description.py
+```
+
+**Terminal 2 - LiDAR:**
+```bash
+ros2 run xe_lidar start_lidar.py --port /dev/ttyUSB0
+```
+
+**Terminal 3 - Camera:**
+```bash
+ros2 run xe_lidar start_camera.py --device /dev/video0
+
+# Camera full resolution (mặc định)
+ros2 run xe_lidar start_camera.py --device /dev/video0
+
+# Hoặc giới hạn resolution
+ros2 run xe_lidar start_camera.py --device /dev/video0 --width 640 --height 480
+```
+
+**Terminal 4 - Arduino Bridge:**
+```bash
+ros2 run xe_lidar start_arduino.py --port /dev/ttyACM0
+```
+
+**Terminal 5 - Autonomous Drive:**
+```bash
+ros2 run xe_lidar start_autonomous.py
+
+# Hoặc với options
+ros2 run xe_lidar start_autonomous.py --max-speed 0.5 --safe-distance 1.0
+ros2 run xe_lidar start_autonomous.py --no-camera  # Không dùng camera
+```
+
+### Cách 3: Chạy bằng launch files (Cách cũ)
 
 **Terminal 1 - Camera:**
 ```bash
-cd ~/ros2_ws
-source install/setup.bash
 ros2 launch xe_lidar camera.launch.py video_device:=/dev/video0
 ```
 
 **Terminal 2 - LiDAR:**
 ```bash
-cd ~/ros2_ws
-source install/setup.bash
 ros2 launch xe_lidar rplidar.launch.py serial_port:=/dev/ttyUSB0
 ```
 
 **Terminal 3 - Arduino Bridge:**
 ```bash
-cd ~/ros2_ws
-source install/setup.bash
 ros2 launch xe_lidar arduino_bridge.launch.py serial_port:=/dev/ttyACM0
 ```
 
 **Terminal 4 - Autonomous Drive:**
 ```bash
-cd ~/ros2_ws
-source install/setup.bash
 ros2 run xe_lidar obstacle_avoidance.py
 ```
 
-### Cách 3: Chạy Lane Detection riêng (Để test/debug)
+### Cách 5: Chạy Lane Detection riêng (Để test/debug)
 
 Lane Detection node chạy độc lập, chỉ xử lý camera và publish kết quả:
 
