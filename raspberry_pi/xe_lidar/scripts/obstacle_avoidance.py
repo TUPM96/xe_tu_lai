@@ -68,6 +68,9 @@ class AutonomousDrive(Node):
         self.safe_distance = self.get_parameter('safe_distance').value
         # Lưu khoảng cách vật cản gần nhất để điều chỉnh góc rẽ
         self.closest_obstacle_distance = float('inf')
+        self.closest_obstacle_angle = 0.0  # Góc của vật cản gần nhất
+        self.left_obstacle_distance = float('inf')  # Khoảng cách vật cản bên trái
+        self.right_obstacle_distance = float('inf')  # Khoảng cách vật cản bên phải
         self.max_linear_speed = self.get_parameter('max_linear_speed').value
         self.max_angular_speed = self.get_parameter('max_angular_speed').value
         self.front_angle_range = self.get_parameter('front_angle_range').value
@@ -239,29 +242,56 @@ class AutonomousDrive(Node):
             self.obstacle_detected = False
             return
         
-        # Tìm vật cản gần nhất phía trước
-        min_distance = min([item[1] for item in front_indices])
-        closest_obstacle = [item for item in front_indices if item[1] == min_distance][0]
-        self.closest_obstacle_distance = min_distance  # Lưu để dùng trong control loop
+        # Tìm vật cản gần nhất phía trước và ở các góc độ khác nhau
+        min_distance = min([item[1] for item in front_indices]) if front_indices else float('inf')
+        if front_indices:
+            closest_obstacle = [item for item in front_indices if item[1] == min_distance][0]
+            self.closest_obstacle_distance = min_distance
+            self.closest_obstacle_angle = closest_obstacle[2]
+        else:
+            self.closest_obstacle_distance = float('inf')
+            self.closest_obstacle_angle = 0.0
+        
+        # Tìm vật cản gần nhất ở mỗi bên
+        if left_indices:
+            self.left_obstacle_distance = min([item[1] for item in left_indices])
+        else:
+            self.left_obstacle_distance = float('inf')
+        
+        if right_indices:
+            self.right_obstacle_distance = min([item[1] for item in right_indices])
+        else:
+            self.right_obstacle_distance = float('inf')
         
         # Kiểm tra có vật cản không - tăng ngưỡng để phát hiện sớm hơn
         detection_distance = self.safe_distance * 1.5  # Phát hiện ở 60cm thay vì 40cm
         if min_distance < detection_distance:
             self.obstacle_detected = True
-            # Xác định hướng vật cản
-            obstacle_angle = closest_obstacle[2]
-            if obstacle_angle < 0:
-                self.obstacle_direction = -1  # Vật cản bên trái
-            else:
-                self.obstacle_direction = 1  # Vật cản bên phải
+            # Xác định hướng vật cản dựa trên góc và khoảng cách
+            obstacle_angle = self.closest_obstacle_angle
             
             # Kiểm tra vật cản ở cả hai bên
             left_obstacles = [item for item in front_indices if item[2] < 0 and item[1] < detection_distance]
             right_obstacles = [item for item in front_indices if item[2] > 0 and item[1] < detection_distance]
             
             if left_obstacles and right_obstacles:
-                # Vật cản ở cả hai bên, quay lại
-                self.obstacle_direction = 0
+                # Vật cản ở cả hai bên - chọn bên có khoảng cách xa hơn để rẽ
+                left_min_dist = min([item[1] for item in left_obstacles])
+                right_min_dist = min([item[1] for item in right_obstacles])
+                if left_min_dist > right_min_dist:
+                    self.obstacle_direction = -1  # Rẽ trái (vật cản bên phải xa hơn)
+                else:
+                    self.obstacle_direction = 1   # Rẽ phải (vật cản bên trái xa hơn)
+            elif obstacle_angle < -0.1:  # Vật cản rõ ràng ở bên trái
+                self.obstacle_direction = -1  # Vật cản bên trái -> rẽ phải
+            elif obstacle_angle > 0.1:  # Vật cản rõ ràng ở bên phải
+                self.obstacle_direction = 1   # Vật cản bên phải -> rẽ trái
+            else:
+                # Vật cản ở giữa - chọn bên có khoảng cách xa hơn
+                if self.left_obstacle_distance > self.right_obstacle_distance:
+                    self.obstacle_direction = -1  # Rẽ trái
+                else:
+                    self.obstacle_direction = 1   # Rẽ phải
         else:
             # Kiểm tra kỹ hơn: không có vật cản ở phía trước VÀ cả hai bên đều an toàn
             left_safe = all([item[1] >= self.safe_distance * 1.2 for item in left_indices]) if left_indices else True
@@ -698,19 +728,27 @@ class AutonomousDrive(Node):
                         cmd.linear.x = self.max_linear_speed * 0.6
                     cmd.angular.z = 0.0
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_LEFT:
-                    # Dang tranh bang cach re trai - dieu chinh goc va toc do dong
-                    # Nếu vật cản quá gần (< 30cm), dừng lại hoặc giảm tốc độ
-                    if self.closest_obstacle_distance < 0.3:
-                        cmd.linear.x = 0.0  # Dừng lại nếu quá gần
-                        self.get_logger().warn(f'⚠️ Vat can qua gan ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                    # Dang tranh bang cach re trai - kiem tra va dieu chinh lien tuc
+                    # Kiểm tra vật cản ở phía đang rẽ (bên trái) để đảm bảo không đâm vào vật cản khác
+                    if self.left_obstacle_distance < 0.3:
+                        # Có vật cản ở phía đang rẽ - dừng lại hoặc đổi hướng
+                        cmd.linear.x = 0.0
+                        self.get_logger().warn(f'⚠️ Vat can ben trai khi dang re trai ({self.left_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                    elif self.closest_obstacle_distance < 0.25:
+                        # Vật cản quá gần phía trước - dừng lại
+                        cmd.linear.x = 0.0
+                        self.get_logger().warn(f'⚠️ Vat can qua gan phia truoc ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
                     else:
                         # Điều chỉnh góc rẽ dựa trên khoảng cách vật cản
                         # Vật cản càng gần thì rẽ càng mạnh
-                        if self.closest_obstacle_distance < 0.5:
-                            avoid_servo_angle = 40.0  # Rẽ mạnh hơn (40° thay vì 45°)
-                            cmd.linear.x = self.max_linear_speed * 0.4  # Giảm tốc độ
+                        if self.closest_obstacle_distance < 0.4:
+                            avoid_servo_angle = 35.0  # Rẽ rất mạnh (35°)
+                            cmd.linear.x = self.max_linear_speed * 0.3  # Giảm tốc độ nhiều
+                        elif self.closest_obstacle_distance < 0.5:
+                            avoid_servo_angle = 40.0  # Rẽ mạnh (40°)
+                            cmd.linear.x = self.max_linear_speed * 0.4
                         else:
-                            avoid_servo_angle = 45.0
+                            avoid_servo_angle = 45.0  # Rẽ bình thường
                             cmd.linear.x = self.max_linear_speed * 0.6
                         
                         self.smoothed_servo_angle_deg = avoid_servo_angle
@@ -720,19 +758,27 @@ class AutonomousDrive(Node):
                         self.avoidance_distance += cmd.linear.x * dt
                     cmd.angular.z = 0.0
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_RIGHT:
-                    # Dang tranh bang cach re phai - dieu chinh goc va toc do dong
-                    # Nếu vật cản quá gần (< 30cm), dừng lại hoặc giảm tốc độ
-                    if self.closest_obstacle_distance < 0.3:
-                        cmd.linear.x = 0.0  # Dừng lại nếu quá gần
-                        self.get_logger().warn(f'⚠️ Vat can qua gan ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                    # Dang tranh bang cach re phai - kiem tra va dieu chinh lien tuc
+                    # Kiểm tra vật cản ở phía đang rẽ (bên phải) để đảm bảo không đâm vào vật cản khác
+                    if self.right_obstacle_distance < 0.3:
+                        # Có vật cản ở phía đang rẽ - dừng lại hoặc đổi hướng
+                        cmd.linear.x = 0.0
+                        self.get_logger().warn(f'⚠️ Vat can ben phai khi dang re phai ({self.right_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                    elif self.closest_obstacle_distance < 0.25:
+                        # Vật cản quá gần phía trước - dừng lại
+                        cmd.linear.x = 0.0
+                        self.get_logger().warn(f'⚠️ Vat can qua gan phia truoc ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
                     else:
                         # Điều chỉnh góc rẽ dựa trên khoảng cách vật cản
                         # Vật cản càng gần thì rẽ càng mạnh
-                        if self.closest_obstacle_distance < 0.5:
-                            avoid_servo_angle = 160.0  # Rẽ mạnh hơn (160° thay vì 155°)
-                            cmd.linear.x = self.max_linear_speed * 0.4  # Giảm tốc độ
+                        if self.closest_obstacle_distance < 0.4:
+                            avoid_servo_angle = 165.0  # Rẽ rất mạnh (165°)
+                            cmd.linear.x = self.max_linear_speed * 0.3  # Giảm tốc độ nhiều
+                        elif self.closest_obstacle_distance < 0.5:
+                            avoid_servo_angle = 160.0  # Rẽ mạnh (160°)
+                            cmd.linear.x = self.max_linear_speed * 0.4
                         else:
-                            avoid_servo_angle = 155.0
+                            avoid_servo_angle = 155.0  # Rẽ bình thường
                             cmd.linear.x = self.max_linear_speed * 0.6
                         
                         self.smoothed_servo_angle_deg = avoid_servo_angle
