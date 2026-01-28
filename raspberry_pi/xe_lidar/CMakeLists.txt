@@ -53,6 +53,7 @@ install(PROGRAMS
   scripts/start_robot_description.py
   scripts/start_lane_detection.py
   scripts/start_all.py
+  scripts/servo_debug.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -70,6 +71,7 @@ install(PROGRAMS
   scripts/start_robot_description.py
   scripts/start_lane_detection.py
   scripts/start_all.py
+  scripts/servo_debug.py
   DESTINATION libexec/${PROJECT_NAME}
 )
 

@@ -6,11 +6,11 @@
  * - 1 Motor DC chính cho tốc độ tiến/lùi
  * 
  * Giao thức Serial:
- * Raspberry Pi gửi: "V:linear:angular\n"
- * - linear: tốc độ tuyến tính (m/s), từ -1.0 đến 1.0
- * - angular: tốc độ góc (rad/s), từ -1.0 đến 1.0
+ * - "V:linear:angular\n"  : Điều khiển (linear m/s, angular rad/s)
+ * - "S:angle\n"           : Debug - set servo trực tiếp (0-180 độ) để chỉnh/đẩy góc
+ * - "C:angle\n"           : Set góc mặc định (center) - angle là độ, dùng làm "thẳng" từ giờ
  * 
- * Ví dụ: "V:0.3:-0.5\n" -> tiến với tốc độ 0.3 m/s, quay trái 0.5 rad/s
+ * Ví dụ: "S:88\n" -> servo quay tới 88 độ. "C:88\n" -> đặt 88 làm góc mặc định.
  */
 
 // ==================== CẤU HÌNH PIN ====================
@@ -31,9 +31,9 @@ const float MAX_STEER_ANGLE = 0.5236;  // Góc quay tối đa (rad) ~30 độ
 const float WHEEL_RADIUS = 0.034; // Bán kính bánh xe (m)
 
 // Tham số servo
-const int SERVO_CENTER = 90;      // Góc giữa của servo (độ)
-const int SERVO_MIN = SERVO_CENTER - 30;  // Góc tối thiểu (60 độ)
-const int SERVO_MAX = SERVO_CENTER + 30;  // Góc tối đa (120 độ)
+const int SERVO_CENTER_DEFAULT = 90;  // Góc giữa mặc định (độ) - co the doi bang lenh C:
+int servo_center = SERVO_CENTER_DEFAULT;  // Góc mặc định hien tai (co the set bang "C:angle")
+const int SERVO_RANGE = 30;              // ± độ so voi center
 
 // Tham số motor PWM
 const int MOTOR_MIN_PWM = 153;  // 60% tốc độ tối thiểu
@@ -63,7 +63,7 @@ void setup() {
   
   // Khởi tạo servo
   steering_servo.attach(SERVO_PIN);
-  steering_servo.write(SERVO_CENTER);  // Đặt servo về vị trí giữa
+  steering_servo.write(servo_center);  // Đặt servo về vị trí giữa (góc mặc định)
   delay(100);
   
   // Khởi tạo motor pins
@@ -153,13 +153,23 @@ void parseCommand(String cmd) {
       current_angular = constrain(current_angular, -1.0, 1.0);
       
       last_command_time = millis();
-      
-      // Debug (có thể bật để test)
-      // Serial.print("Recv: linear=");
-      // Serial.print(current_linear, 3);
-      // Serial.print(", angular=");
-      // Serial.println(current_angular, 3);
     }
+  }
+  // Debug: "S:angle" - set servo truc tiep (do)
+  else if (cmd.startsWith("S:")) {
+    int angle = cmd.substring(2).toInt();
+    angle = constrain(angle, 0, 180);
+    steering_servo.write(angle);
+    Serial.print("Servo set: ");
+    Serial.println(angle);
+  }
+  // Set góc mặc định: "C:angle" - angle la do, dung lam "thang"
+  else if (cmd.startsWith("C:")) {
+    int angle = cmd.substring(2).toInt();
+    servo_center = constrain(angle, 0, 180);
+    steering_servo.write(servo_center);
+    Serial.print("Servo center (mac dinh) = ");
+    Serial.println(servo_center);
   }
 }
 
@@ -212,15 +222,15 @@ float calculateSteeringAngle(float angular_velocity) {
 void controlSteering(float steering_angle_rad) {
   // Chuyển đổi từ radians sang góc servo (0-180 độ)
   // steering_angle: -MAX_STEER_ANGLE đến +MAX_STEER_ANGLE (radians)
-  // servo_angle: SERVO_MIN đến SERVO_MAX (degrees)
+  // servo_angle: servo_center ± SERVO_RANGE (degrees)
+  
+  int servo_min = servo_center - SERVO_RANGE;
+  int servo_max = servo_center + SERVO_RANGE;
   
   float normalized = steering_angle_rad / MAX_STEER_ANGLE;  // -1.0 đến 1.0
-  int servo_angle = SERVO_CENTER + (normalized * (SERVO_MAX - SERVO_CENTER));
+  int servo_angle = servo_center + (int)(normalized * SERVO_RANGE);
   
-  // Giới hạn góc servo
-  servo_angle = constrain(servo_angle, SERVO_MIN, SERVO_MAX);
-  
-  // Điều khiển servo
+  servo_angle = constrain(servo_angle, servo_min, servo_max);
   steering_servo.write(servo_angle);
 }
 

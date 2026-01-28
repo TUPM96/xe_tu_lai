@@ -163,52 +163,76 @@ class LaneDetectionNode(Node):
             # Phat hien canh bang Canny
             edges = cv2.Canny(blurred, 50, 150)
 
-            # Phat hien duong thang bang HoughLinesP
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20,
-                                   minLineLength=30, maxLineGap=20)
+            # Phat hien duong thang bang HoughLinesP (tang threshold/minLen de bo doan ngan, nhiêu)
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=40,
+                                   minLineLength=60, maxLineGap=25)
 
-            # Phan loai duong thang thanh ben trai va ben phai
-            left_lines = []
-            right_lines = []
+            # Chi nhan 2 vach: 1 ben trai, 1 ben phai. Vung giua bo qua.
             center_x = width / 2
+            left_zone_max = width * 0.42   # Trai: mid_x phai < 42% man hinh
+            right_zone_min = width * 0.58  # Phai: mid_x phai > 58% man hinh
+
+            left_candidates = []   # (bottom_x, line)
+            right_candidates = []
 
             if lines is not None and len(lines) > 0:
                 for line in lines:
                     x1, y1, x2, y2 = line[0]
                     mid_x = (x1 + x2) / 2
+                    bottom_x = x1 if y1 > y2 else x2  # Diem gan camera hon (y lon hon)
 
-                    # Tinh slope
                     if abs(x2 - x1) < 1:
                         slope = 999
                     else:
                         slope = (y2 - y1) / (x2 - x1)
 
-                    # Chi nhan cac duong co do nghieng lon (gan thang dung)
+                    # Chi nhan duong gan thang dung, va nam dung vung trai/phai
                     if abs(slope) > 0.5 or abs(slope) == 999:
-                        if mid_x < center_x:  # Duong ben trai
-                            left_lines.append(line[0])
-                            cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (255, 0, 0), 3)
-                        else:  # Duong ben phai
-                            right_lines.append(line[0])
-                            cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (0, 0, 255), 3)
+                        if mid_x < left_zone_max:
+                            left_candidates.append((bottom_x, line[0]))
+                        elif mid_x > right_zone_min:
+                            right_candidates.append((bottom_x, line[0]))
+                        # else: bo qua vung giua (0.42 -> 0.58)
 
-            # Tinh diem trung binh cua cac duong o duoi cung cua ROI
+            # Chi lay 1 vach trai (xa trai nhat = bottom_x nho nhat), 1 vach phai (xa phai nhat = bottom_x lon nhat)
             left_x_points = []
             right_x_points = []
+            best_left_line = None
+            best_right_line = None
 
-            for line in left_lines:
-                x1, y1, x2, y2 = line
-                if y1 > y2:
-                    left_x_points.append(x1)
-                else:
-                    left_x_points.append(x2)
+            if left_candidates:
+                best_left_line = min(left_candidates, key=lambda t: t[0])  # bottom_x nho nhat
+                x1, y1, x2, y2 = best_left_line[1]
+                left_x_points.append(x1 if y1 > y2 else x2)
+            if right_candidates:
+                best_right_line = max(right_candidates, key=lambda t: t[0])  # bottom_x lon nhat
+                x1, y1, x2, y2 = best_right_line[1]
+                right_x_points.append(x1 if y1 > y2 else x2)
 
-            for line in right_lines:
-                x1, y1, x2, y2 = line
-                if y1 > y2:
-                    right_x_points.append(x1)
+            # Keo dai va ve het ca duong (tu dau ROI xuong day anh) - to het ca line
+            roi_h = roi_bottom - roi_top
+
+            def extend_and_draw(line_data, color):
+                """Tu (x1,y1),(x2,y2) trong ROI, keo dai line tu y=0 den y=roi_h, ve len anh."""
+                if line_data is None:
+                    return
+                x1, y1, x2, y2 = line_data[1]
+                if abs(x2 - x1) < 1:
+                    # Thang dung: x co dinh
+                    x = int((x1 + x2) / 2)
+                    pt1 = (max(0, min(x, width - 1)), roi_top)
+                    pt2 = (max(0, min(x, width - 1)), height - 1)
                 else:
-                    right_x_points.append(x2)
+                    slope = (y2 - y1) / (x2 - x1)
+                    # x = x1 + (y - y1) / slope
+                    x_at_top = x1 - y1 / slope
+                    x_at_bot = x1 + (roi_h - 1 - y1) / slope
+                    pt1 = (int(np.clip(x_at_top, 0, width - 1)), roi_top)
+                    pt2 = (int(np.clip(x_at_bot, 0, width - 1)), height - 1)
+                cv2.line(image_with_lanes, pt1, pt2, color, 3)
+
+            extend_and_draw(best_left_line, (255, 0, 0))
+            extend_and_draw(best_right_line, (0, 0, 255))
 
             # Tinh offset tu giua duong
             lane_center = None

@@ -154,6 +154,23 @@ python3 test_servo.py /dev/ttyACM0
 - Không có tiếng kêu bất thường
 - Góc quay đối xứng trái/phải
 
+### Debug Servo – Đẩy góc & set góc mặc định (thẳng)
+
+Dùng khi cần chỉnh góc “thẳng” của servo (góc mặc định):
+
+```bash
+python3 servo_debug.py /dev/ttyACM0
+# hoặc: ros2 run xe_lidar servo_debug.py -- /dev/ttyACM0
+```
+
+**Lệnh trong script:**
+- Nhập **số độ** (vd: `88`) → servo quay tới góc đó (đẩy góc xuống/thử từng độ).
+- **`c 88`** → đặt **88** làm **góc mặc định** (center). Từ giờ “thẳng” = 88° cho tới khi tắt nguồn Arduino.
+- **`+` / `-`** → tăng/giảm 1 độ so với góc hiện tại.
+- **`q`** → thoát.
+
+**Quy trình:** Thử lần lượt 88, 89, 90… hoặc dùng `+`/`-` cho tới khi bánh lái thẳng, rồi gõ `c <số_độ>` để set mặc định. Muốn giữ lâu dài thì sửa `SERVO_CENTER_DEFAULT` trong `arduino/arduino.ino` và nạp lại firmware.
+
 ### Test Motor DC (Tiến/Lùi)
 
 Script test motor DC điều khiển tiến/lùi với các tốc độ khác nhau.
