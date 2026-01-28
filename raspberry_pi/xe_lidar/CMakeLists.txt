@@ -46,7 +46,9 @@ install(PROGRAMS
   scripts/camera_node.py
   scripts/scan_filter.py
   scripts/lane_detection_node.py
+  scripts/lidar_ackermann_drive.py
   scripts/start_lidar.py
+  scripts/start_lidar_simple.py
   scripts/start_camera.py
   scripts/start_arduino.py
   scripts/start_autonomous.py
@@ -64,7 +66,9 @@ install(PROGRAMS
   scripts/camera_node.py
   scripts/scan_filter.py
   scripts/lane_detection_node.py
+  scripts/lidar_ackermann_drive.py
   scripts/start_lidar.py
+  scripts/start_lidar_simple.py
   scripts/start_camera.py
   scripts/start_arduino.py
   scripts/start_autonomous.py

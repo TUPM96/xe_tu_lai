@@ -350,6 +350,41 @@ ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
 
 Sau khi test xong tất cả phần cứng, chạy hệ thống tự lái:
 
+### Cách 0: Chạy xe tự lái Ackermann chỉ dùng LiDAR (Giống project GitHub)
+
+Để chạy xe tự lái Ackermann chỉ dùng LiDAR, tương tự các project trên GitHub như [mini-tesla-ROS2](https://github.com/ZiyadBouazara/autonomous-driving-vehicle-ros2):
+
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+
+# Chạy với tham số mặc định
+ros2 launch xe_lidar lidar_ackermann_drive.launch.py
+
+# Hoặc với tham số tùy chỉnh
+ros2 launch xe_lidar lidar_ackermann_drive.launch.py \
+  max_linear_speed:=0.3 \
+  safe_distance:=0.5 \
+  wall_follow_distance:=0.4 \
+  front_angle_range:=90.0 \
+  lidar_serial_port:=/dev/ttyUSB0 \
+  arduino_serial_port:=/dev/ttyACM0 \
+  servo_center_angle:=100.0 \
+  servo_min_angle:=55.0 \
+  servo_max_angle:=145.0
+```
+
+**Tính năng:**
+- ✅ Wall following (bám tường) - tự động điều chỉnh để giữ khoảng cách với tường hai bên
+- ✅ Obstacle avoidance (tránh vật cản) - tự động rẽ tránh khi gặp vật cản phía trước
+- ✅ Điều khiển góc servo và tốc độ động cơ
+- ✅ Không cần camera - chỉ dùng LiDAR
+
+**Tham số:**
+- `safe_distance`: Khoảng cách an toàn để tránh vật cản (m)
+- `wall_follow_distance`: Khoảng cách bám tường (m)
+- `front_angle_range`: Góc phía trước để kiểm tra vật cản (degrees)
+
 ### Cách 1: Chạy tất cả cùng lúc (Khuyến nghị)
 
 ```bash
@@ -439,6 +474,34 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
   servo_angle_smoothing:=0.8
 ```
 
+### Cách 1.5: Chạy chỉ LiDAR đơn giản (Giống project GitHub)
+
+Để chạy chỉ LiDAR như các project trên GitHub (ví dụ: [mini-tesla-ROS2](https://github.com/ZiyadBouazara/autonomous-driving-vehicle-ros2)):
+
+```bash
+# Cách đơn giản nhất - chỉ cần port (mặc định /dev/ttyUSB0)
+ros2 run xe_lidar start_lidar_simple.py
+
+# Hoặc chỉ định port
+ros2 run xe_lidar start_lidar_simple.py --port /dev/ttyUSB0
+
+# Hoặc dùng launch file trực tiếp
+ros2 launch xe_lidar rplidar_simple.launch.py serial_port:=/dev/ttyUSB0
+```
+
+**Kiểm tra LiDAR đang chạy:**
+```bash
+# Xem dữ liệu scan
+ros2 topic echo /scan
+
+# Xem thông tin topic
+ros2 topic info /scan
+
+# Visualize trong RViz2
+rviz2
+# Thêm LaserScan display, chọn topic: /scan, frame: laser_frame
+```
+
 ### Cách 2: Chạy từng script riêng lẻ (Khuyến nghị để debug)
 
 Mỗi script chạy trong 1 terminal riêng:
@@ -450,7 +513,14 @@ ros2 run xe_lidar start_robot_description.py
 
 **Terminal 2 - LiDAR:**
 ```bash
+# Cách đơn giản (chỉ cần port)
+ros2 run xe_lidar start_lidar_simple.py --port /dev/ttyUSB0
+
+# Hoặc cách đầy đủ (có thể tùy chỉnh scan mode)
 ros2 run xe_lidar start_lidar.py --port /dev/ttyUSB0
+
+# Hoặc dùng launch file trực tiếp
+ros2 launch xe_lidar rplidar_simple.launch.py serial_port:=/dev/ttyUSB0
 ```
 
 **Terminal 3 - Camera:**
