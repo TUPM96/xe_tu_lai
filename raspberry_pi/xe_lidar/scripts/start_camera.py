@@ -13,8 +13,8 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description='Khoi dong Camera')
     parser.add_argument('--device', default='/dev/video0', help='Video device')
-    parser.add_argument('--width', type=int, default=640, help='Chieu rong anh')
-    parser.add_argument('--height', type=int, default=480, help='Chieu cao anh')
+    parser.add_argument('--width', type=int, default=0, help='Chieu rong anh (0 = full resolution)')
+    parser.add_argument('--height', type=int, default=0, help='Chieu cao anh (0 = full resolution)')
     parser.add_argument('--fps', type=int, default=30, help='Frame per second')
     args = parser.parse_args()
 
@@ -22,7 +22,10 @@ def main():
     print("  KHOI DONG CAMERA")
     print("=" * 50)
     print(f"Video Device: {args.device}")
-    print(f"Resolution: {args.width}x{args.height} @ {args.fps}fps")
+    if args.width > 0 and args.height > 0:
+        print(f"Resolution: {args.width}x{args.height} @ {args.fps}fps")
+    else:
+        print(f"Resolution: AUTO (full) @ {args.fps}fps")
     print("=" * 50)
 
     # Kiem tra device ton tai
