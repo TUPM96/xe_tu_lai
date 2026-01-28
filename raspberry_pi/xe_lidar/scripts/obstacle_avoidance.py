@@ -34,7 +34,9 @@ class AutonomousDrive(Node):
         self.declare_parameter('kp', 0.5)
         self.declare_parameter('ki', 0.0)
         self.declare_parameter('kd', 0.0)
-        
+        # Tham số lane detection - C càng cao thì chỉ nhận màu đen hơn (loại bỏ xám)
+        self.declare_parameter('lane_threshold_c', 25)  # Giá trị C trong adaptive threshold
+
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
         self.max_linear_speed = self.get_parameter('max_linear_speed').value
@@ -46,6 +48,7 @@ class AutonomousDrive(Node):
         self.kp = float(self.get_parameter('kp').value)
         self.ki = float(self.get_parameter('ki').value)
         self.kd = float(self.get_parameter('kd').value)
+        self.lane_threshold_c = int(self.get_parameter('lane_threshold_c').value)
         self.lane_error_integral = 0.0
         self.lane_error_prev = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
@@ -218,16 +221,16 @@ class AutonomousDrive(Node):
         """Xu ly camera de phat hien 2 vach DEN 2 ben duong va dieu chinh di giua duong"""
         if image is None:
             return
-        
+
         try:
             height, width = image.shape[:2]
             image_with_lanes = image.copy()
-            
+
             # Tao vung quan tam (ROI) - phan duoi anh (vung duong)
             roi_top = int(height * 0.4)  # Bat dau tu 40% chieu cao
             roi_bottom = height
             roi = image[roi_top:roi_bottom, :]
-            
+
             # Chuyen sang Grayscale de phat hien vach den
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
@@ -235,35 +238,30 @@ class AutonomousDrive(Node):
             gray_blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
             # Dung Adaptive Threshold de tu dong dieu chinh theo anh sang
-            # ADAPTIVE_THRESH_MEAN_C: threshold = mean of neighborhood - C
-            # Block size = 25: kich thuoc vung lan can
-            # C = 10: hang so tru di (tang len de detect vach toi hon)
+            # C cao hon = chi nhan mau den hon (loai bo xam)
             black_mask = cv2.adaptiveThreshold(
                 gray_blurred,
                 255,
                 cv2.ADAPTIVE_THRESH_MEAN_C,
                 cv2.THRESH_BINARY_INV,
                 blockSize=25,
-                C=10
+                C=self.lane_threshold_c  # Co the dieu chinh tu launch file
             )
 
             # Ap dung them mot lan blur de lam min mask
             blurred = cv2.GaussianBlur(black_mask, (5, 5), 0)
-            
+
             # Phat hien canh bang Canny
             edges = cv2.Canny(blurred, 50, 150)
-            
-            # Phat hien duong thang bang HoughLinesP (giam threshold de detect duoc nhieu hon)
+
+            # Phat hien duong thang bang HoughLinesP
             lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20,
                                    minLineLength=30, maxLineGap=20)
 
             # Phan loai duong thang thanh ben trai va ben phai
-            # Phan loai don gian: dua tren vi tri x cua duong (khong can slope)
             left_lines = []
             right_lines = []
             center_x = width / 2
-            left_x_avg = None
-            right_x_avg = None
 
             if lines is not None and len(lines) > 0:
                 for line in lines:
@@ -277,7 +275,6 @@ class AutonomousDrive(Node):
                         slope = (y2 - y1) / (x2 - x1)
 
                     # Chi nhan cac duong co do nghieng lon (gan thang dung)
-                    # |slope| > 0.5 hoac duong thang dung
                     if abs(slope) > 0.5 or abs(slope) == 999:
                         # Phan loai theo vi tri x
                         if mid_x < center_x:  # Duong ben trai
@@ -286,73 +283,70 @@ class AutonomousDrive(Node):
                         else:  # Duong ben phai
                             right_lines.append(line[0])
                             cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (0, 0, 255), 3)
-            
+
             # Tinh diem trung binh cua cac duong o duoi cung cua ROI
             left_x_points = []
             right_x_points = []
-            roi_height = roi_bottom - roi_top
-            
+
             # Lay diem o duoi cung (y lon nhat) cua moi duong
             for line in left_lines:
                 x1, y1, x2, y2 = line
-                # Lay diem co y lon hon (gan camera hon)
                 if y1 > y2:
                     left_x_points.append(x1)
                 else:
                     left_x_points.append(x2)
-            
+
             for line in right_lines:
                 x1, y1, x2, y2 = line
                 if y1 > y2:
                     right_x_points.append(x1)
                 else:
                     right_x_points.append(x2)
-            
+
             # Tinh offset tu giua duong
+            lane_center = None
             if left_x_points and right_x_points:
                 # Co ca 2 vach ke duong - di giua
                 left_x_avg = np.mean(left_x_points)
                 right_x_avg = np.mean(right_x_points)
                 lane_center = (left_x_avg + right_x_avg) / 2
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)  # Normalize ve -1 den 1
+                self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-                
+
                 # Ve duong giua lan (mau vang)
                 center_y_bottom = height
                 center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom),
                         (int(lane_center), center_y_top), (0, 255, 255), 3)
-                
+
                 # Ve duong giua man hinh (mau xanh la)
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
                         (int(center_x), center_y_top), (0, 255, 0), 2)
             elif left_x_points:
-                # Chi co vach ben trai, gia dinh vach phai cach 2m (khoang 200 pixel)
+                # Chi co vach ben trai
                 left_x_avg = np.mean(left_x_points)
-                lane_center = left_x_avg + 200  # Offset sang phai
+                lane_center = left_x_avg + 200
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-                
-                # Ve duong giua uoc tinh
+
                 center_y_bottom = height
                 center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom),
                         (int(lane_center), center_y_top), (0, 255, 255), 3)
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
                         (int(center_x), center_y_top), (0, 255, 0), 2)
             elif right_x_points:
-                # Chi co vach ben phai, gia dinh vach trai cach 2m
+                # Chi co vach ben phai
                 right_x_avg = np.mean(right_x_points)
-                lane_center = right_x_avg - 200  # Offset sang trai
+                lane_center = right_x_avg - 200
                 self.lane_center_offset = (lane_center - center_x) / (width / 2)
                 self.lane_detected = True
-                
-                # Ve duong giua uoc tinh
+
                 center_y_bottom = height
                 center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom),
                         (int(lane_center), center_y_top), (0, 255, 255), 3)
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
                         (int(center_x), center_y_top), (0, 255, 0), 2)
             else:
                 self.lane_detected = False
@@ -360,7 +354,7 @@ class AutonomousDrive(Node):
                 # Ve duong giua man hinh
                 center_y_bottom = height
                 center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom), 
+                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
                         (int(center_x), center_y_top), (0, 255, 0), 2)
             
             # Ve text thong tin

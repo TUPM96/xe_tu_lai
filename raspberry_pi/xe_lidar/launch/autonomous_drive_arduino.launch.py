@@ -117,6 +117,25 @@ def generate_launch_description():
         description='Serial port của Arduino'
     )
     
+    # Launch arguments cho tốc độ (dùng chung cho cả autonomous_drive và arduino_bridge)
+    max_linear_speed_arg = DeclareLaunchArgument(
+        'max_linear_speed',
+        default_value='0.3',
+        description='Tốc độ tối đa (m/s)'
+    )
+
+    motor_min_pwm_arg = DeclareLaunchArgument(
+        'motor_min_pwm',
+        default_value='100',
+        description='PWM tối thiểu cho motor (0-255)'
+    )
+
+    lane_threshold_c_arg = DeclareLaunchArgument(
+        'lane_threshold_c',
+        default_value='25',
+        description='Nguong C cho lane detection (cao hon = chi nhan mau den hon)'
+    )
+
     arduino_bridge_node = Node(
         package=package_name,
         executable='arduino_bridge.py',
@@ -126,6 +145,8 @@ def generate_launch_description():
             'serial_port': LaunchConfiguration('arduino_serial_port'),
             'baudrate': 115200,
             'auto_detect': True,
+            'max_linear_speed': LaunchConfiguration('max_linear_speed'),
+            'motor_min_pwm': LaunchConfiguration('motor_min_pwm'),
         }]
     )
     
@@ -142,7 +163,7 @@ def generate_launch_description():
             'use_sim_time': False,
             'min_distance': 0.5,
             'safe_distance': 0.8,
-            'max_linear_speed': 0.168,  # giam ~44% so voi 0.3 de xe di cham hon (0.3 -> 0.24 -> 0.168)
+            'max_linear_speed': LaunchConfiguration('max_linear_speed'),
             'max_angular_speed': 1.0,
             'front_angle_range': 60,
             'use_camera': True,
@@ -150,7 +171,8 @@ def generate_launch_description():
             # Tham số PID cho bám làn (có thể override khi launch: kp:=..., ki:=..., kd:=...)
             'kp': 0.5,
             'ki': 0.0,
-            'kd': 0.0
+            'kd': 0.0,
+            'lane_threshold_c': LaunchConfiguration('lane_threshold_c'),
         }]
     )
     
@@ -176,6 +198,9 @@ def generate_launch_description():
         scan_mode_arg,
         video_device_arg,
         arduino_serial_port_arg,
+        max_linear_speed_arg,
+        motor_min_pwm_arg,
+        lane_threshold_c_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,

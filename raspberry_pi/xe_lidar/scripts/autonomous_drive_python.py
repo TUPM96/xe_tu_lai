@@ -265,63 +265,90 @@ class AutonomousDrive:
             self.obstacle_detected = False
     
     def process_camera_lane_detection(self, image):
-        """Xử lý camera để phát hiện vạch kẻ đường (giống như ROS2)"""
+        """Xử lý camera để phát hiện 2 vạch ĐEN 2 bên đường (giống ROS2 code cũ)"""
         if image is None:
             self.lane_detected = False
             self.lane_center_offset = 0.0
+            self.debug_image = None
             return
-        
+
         try:
             height, width = image.shape[:2]
             roi_top = int(height * 0.4)
             roi = image[roi_top:height, :]
-            
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-            lower_white = np.array([0, 0, 200])
-            upper_white = np.array([180, 30, 255])
-            white_mask = cv2.inRange(hsv, lower_white, upper_white)
-            blurred = cv2.GaussianBlur(white_mask, (5, 5), 0)
+            roi_h = height - roi_top
+
+            # Chuyển sang grayscale để phát hiện vạch ĐEN
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+            # Gaussian blur trước để giảm nhiễu
+            gray_blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+            # Dùng Adaptive Threshold để tự động điều chỉnh theo ánh sáng
+            # Điều này giúp chỉ nhận vạch ĐEN, bỏ qua vùng xám
+            black_mask = cv2.adaptiveThreshold(
+                gray_blurred,
+                255,
+                cv2.ADAPTIVE_THRESH_MEAN_C,
+                cv2.THRESH_BINARY_INV,
+                blockSize=25,
+                C=10
+            )
+
+            # Blur thêm 1 lần để làm mịn mask
+            blurred = cv2.GaussianBlur(black_mask, (5, 5), 0)
+
+            # Phát hiện cạnh bằng Canny
             edges = cv2.Canny(blurred, 50, 150)
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=30, 
-                                   minLineLength=20, maxLineGap=15)
-            
-            if lines is None or len(lines) == 0:
-                self.lane_detected = False
-                self.lane_center_offset = 0.0
-                return
-            
-            left_lines = []
-            right_lines = []
+
+            # Phát hiện đường thẳng bằng HoughLinesP
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=40,
+                                   minLineLength=60, maxLineGap=25)
+
+            # Chỉ nhận 2 vạch: 1 bên trái, 1 bên phải. Vùng giữa bỏ qua.
             center_x = width / 2
-            
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                if x2 != x1:
-                    slope = (y2 - y1) / (x2 - x1)
+            left_zone_max = width * 0.42   # Trái: mid_x phải < 42% màn hình
+            right_zone_min = width * 0.58  # Phải: mid_x phải > 58% màn hình
+
+            left_candidates = []   # (bottom_x, line)
+            right_candidates = []
+
+            if lines is not None and len(lines) > 0:
+                for line in lines:
+                    x1, y1, x2, y2 = line[0]
                     mid_x = (x1 + x2) / 2
-                    
-                    if slope < -0.2 and mid_x < center_x:
-                        left_lines.append(line[0])
-                    elif slope > 0.2 and mid_x > center_x:
-                        right_lines.append(line[0])
-            
+                    bottom_x = x1 if y1 > y2 else x2  # Điểm gần camera hơn (y lớn hơn)
+
+                    if abs(x2 - x1) < 1:
+                        slope = 999
+                    else:
+                        slope = (y2 - y1) / (x2 - x1)
+
+                    # Chỉ nhận đường gần thẳng đứng và nằm đúng vùng trái/phải
+                    if abs(slope) > 0.5 or abs(slope) == 999:
+                        if mid_x < left_zone_max:
+                            left_candidates.append((bottom_x, line[0]))
+                        elif mid_x > right_zone_min:
+                            right_candidates.append((bottom_x, line[0]))
+                        # else: bỏ qua vùng giữa (0.42 -> 0.58)
+
+            # Chỉ lấy 1 vạch trái (xa trái nhất), 1 vạch phải (xa phải nhất)
             left_x_points = []
             right_x_points = []
-            
-            for line in left_lines:
-                x1, y1, x2, y2 = line
-                if y1 > y2:
-                    left_x_points.append(x1)
-                else:
-                    left_x_points.append(x2)
-            
-            for line in right_lines:
-                x1, y1, x2, y2 = line
-                if y1 > y2:
-                    right_x_points.append(x1)
-                else:
-                    right_x_points.append(x2)
-            
+            best_left_line = None
+            best_right_line = None
+
+            if left_candidates:
+                best_left_line = min(left_candidates, key=lambda t: t[0])  # bottom_x nhỏ nhất
+                x1, y1, x2, y2 = best_left_line[1]
+                left_x_points.append(x1 if y1 > y2 else x2)
+            if right_candidates:
+                best_right_line = max(right_candidates, key=lambda t: t[0])  # bottom_x lớn nhất
+                x1, y1, x2, y2 = best_right_line[1]
+                right_x_points.append(x1 if y1 > y2 else x2)
+
+            # Tính lane center và offset
+            lane_center = None
             if left_x_points and right_x_points:
                 left_x_avg = np.mean(left_x_points)
                 right_x_avg = np.mean(right_x_points)
@@ -341,11 +368,63 @@ class AutonomousDrive:
             else:
                 self.lane_detected = False
                 self.lane_center_offset = 0.0
-                
+
+            # Tạo debug image với các line được vẽ
+            self.debug_image = image.copy()
+
+            # Hàm kéo dài và vẽ line
+            def extend_and_draw(line_data, color):
+                if line_data is None:
+                    return
+                x1, y1, x2, y2 = line_data[1]
+                if abs(x2 - x1) < 1:
+                    # Thẳng đứng: x cố định
+                    x = int((x1 + x2) / 2)
+                    pt1 = (max(0, min(x, width - 1)), roi_top)
+                    pt2 = (max(0, min(x, width - 1)), height - 1)
+                else:
+                    slope = (y2 - y1) / (x2 - x1)
+                    x_at_top = x1 - y1 / slope
+                    x_at_bot = x1 + (roi_h - 1 - y1) / slope
+                    pt1 = (int(np.clip(x_at_top, 0, width - 1)), roi_top)
+                    pt2 = (int(np.clip(x_at_bot, 0, width - 1)), height - 1)
+                cv2.line(self.debug_image, pt1, pt2, color, 3)
+
+            # Vẽ vạch trái (xanh dương) và vạch phải (đỏ)
+            extend_and_draw(best_left_line, (255, 0, 0))
+            extend_and_draw(best_right_line, (0, 0, 255))
+
+            # Vẽ đường giữa màn hình (xanh lá)
+            cv2.line(self.debug_image, (int(center_x), height), (int(center_x), roi_top), (0, 255, 0), 2)
+
+            # Vẽ đường giữa làn (vàng) nếu có
+            if lane_center is not None:
+                cv2.line(self.debug_image, (int(lane_center), height), (int(lane_center), roi_top), (0, 255, 255), 3)
+
+            # Vẽ text thông tin
+            status_text = "Phat hien lan duong" if self.lane_detected else "Khong phat hien"
+            offset_text = f"Offset: {self.lane_center_offset:.2f}"
+            cv2.putText(self.debug_image, status_text, (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(self.debug_image, offset_text, (10, 60),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            # Vẽ hướng cần đi
+            if self.lane_detected:
+                if abs(self.lane_center_offset) < 0.1:
+                    direction_text = "Di thang"
+                elif self.lane_center_offset > 0:
+                    direction_text = f"Re trai ({abs(self.lane_center_offset):.2f})"
+                else:
+                    direction_text = f"Re phai ({abs(self.lane_center_offset):.2f})"
+                cv2.putText(self.debug_image, direction_text, (10, 90),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
         except Exception as e:
             print(f"⚠️  Lỗi xử lý camera: {str(e)}")
             self.lane_detected = False
             self.lane_center_offset = 0.0
+            self.debug_image = None
     
     def compute_control(self):
         """

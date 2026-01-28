@@ -34,6 +34,8 @@ class ArduinoBridge(Node):
         self.declare_parameter('odom_frame_id', 'odom')
         self.declare_parameter('base_frame_id', 'base_link')
         self.declare_parameter('publish_odom', True)  # Bật/tắt publish odometry
+        self.declare_parameter('max_linear_speed', 0.3)  # Tốc độ tối đa (m/s) gửi tới Arduino
+        self.declare_parameter('motor_min_pwm', 100)  # PWM tối thiểu (0-255) gửi tới Arduino
         
         serial_port = self.get_parameter('serial_port').value
         baudrate = self.get_parameter('baudrate').value
@@ -70,6 +72,9 @@ class ArduinoBridge(Node):
                 self.serial_conn.read_all()
             
             self.get_logger().info(f'Đã kết nối với Arduino tại {serial_port} (baudrate: {baudrate})')
+
+            # Gửi config tốc độ tới Arduino
+            self.send_motor_config()
         except serial.SerialException as e:
             self.get_logger().error(f'Không thể kết nối với Arduino: {str(e)}')
             self.get_logger().error(f'Đảm bảo Arduino đã được kết nối và port đúng: {serial_port}')
@@ -161,6 +166,29 @@ class ArduinoBridge(Node):
         
         return None
     
+    def send_motor_config(self):
+        """Gửi config tốc độ tới Arduino (lệnh M:)"""
+        if self.serial_conn is None or not self.serial_conn.is_open:
+            return
+
+        max_speed = self.get_parameter('max_linear_speed').value
+        min_pwm = self.get_parameter('motor_min_pwm').value
+
+        try:
+            # Format: "M:max_speed:min_pwm\n"
+            command = f"M:{max_speed:.2f}:{min_pwm}\n"
+            self.serial_conn.write(command.encode('utf-8'))
+            self.serial_conn.flush()
+            self.get_logger().info(f'Đã gửi config Arduino: max_speed={max_speed} m/s, min_pwm={min_pwm}')
+
+            # Đọc response từ Arduino
+            time.sleep(0.1)
+            if self.serial_conn.in_waiting > 0:
+                response = self.serial_conn.read(self.serial_conn.in_waiting).decode('utf-8', errors='ignore')
+                self.get_logger().info(f'Arduino response: {response.strip()}')
+        except Exception as e:
+            self.get_logger().warn(f'Không thể gửi config tới Arduino: {str(e)}')
+
     def cmd_vel_callback(self, msg):
         """Callback xử lý lệnh cmd_vel từ ROS2"""
         linear = msg.linear.x

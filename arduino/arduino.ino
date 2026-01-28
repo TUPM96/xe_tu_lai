@@ -9,8 +9,10 @@
  * - "V:linear:angular\n"  : Điều khiển (linear m/s, angular rad/s)
  * - "S:angle\n"           : Debug - set servo trực tiếp (0-180 độ) để chỉnh/đẩy góc
  * - "C:angle\n"           : Set góc mặc định (center) - angle là độ, dùng làm "thẳng" từ giờ
- * 
+ * - "M:max_speed:min_pwm\n": Set tốc độ tối đa (m/s) và PWM tối thiểu (0-255)
+ *
  * Ví dụ: "S:88\n" -> servo quay tới 88 độ. "C:88\n" -> đặt 88 làm góc mặc định.
+ * Ví dụ: "M:0.3:100\n" -> max speed = 0.3 m/s, min PWM = 100
  */
 
 // ==================== CẤU HÌNH PIN ====================
@@ -35,10 +37,10 @@ const int SERVO_CENTER_DEFAULT = 100;  // Góc giữa mặc định (độ) - co
 int servo_center = SERVO_CENTER_DEFAULT;  // Góc mặc định hien tai (co the set bang "C:angle")
 const int SERVO_RANGE = 45;              // ± độ so voi center
 
-// Tham số motor PWM
-const int MOTOR_MIN_PWM = 153;  // 60% tốc độ tối thiểu
+// Tham số motor PWM (có thể thay đổi từ Python)
+int motor_min_pwm = 153;  // 60% tốc độ tối thiểu (có thể set từ Python)
 const int MOTOR_MAX_PWM = 255;
-const float MAX_LINEAR_VELOCITY = 1.0;  // Tốc độ tối đa (m/s)
+float max_linear_velocity = 1.0;  // Tốc độ tối đa (m/s) - có thể set từ Python
 
 // ==================== BIẾN TOÀN CỤC ====================
 #include <Servo.h>
@@ -151,8 +153,8 @@ void parseCommand(String cmd) {
       current_linear = linearStr.toFloat();
       current_angular = angularStr.toFloat();
       
-      // Giới hạn giá trị
-      current_linear = constrain(current_linear, -MAX_LINEAR_VELOCITY, MAX_LINEAR_VELOCITY);
+      // Giới hạn giá trị theo max_linear_velocity (có thể set từ Python)
+      current_linear = constrain(current_linear, -max_linear_velocity, max_linear_velocity);
       current_angular = constrain(current_angular, -1.0, 1.0);
       
       last_command_time = millis();
@@ -175,6 +177,27 @@ void parseCommand(String cmd) {
     steering_servo.write(servo_center);
     Serial.print("Servo center (mac dinh) = ");
     Serial.println(servo_center);
+  }
+  // Set tốc độ tối đa và PWM tối thiểu: "M:max_speed:min_pwm"
+  else if (cmd.startsWith("M:")) {
+    cmd = cmd.substring(2);  // Bỏ "M:"
+    int colonIdx = cmd.indexOf(':');
+    if (colonIdx > 0) {
+      float new_max_speed = cmd.substring(0, colonIdx).toFloat();
+      int new_min_pwm = cmd.substring(colonIdx + 1).toInt();
+
+      if (new_max_speed > 0.0 && new_max_speed <= 5.0) {
+        max_linear_velocity = new_max_speed;
+      }
+      if (new_min_pwm >= 0 && new_min_pwm <= 255) {
+        motor_min_pwm = new_min_pwm;
+      }
+
+      Serial.print("Motor config: max_speed=");
+      Serial.print(max_linear_velocity);
+      Serial.print(" m/s, min_pwm=");
+      Serial.println(motor_min_pwm);
+    }
   }
 }
 
@@ -255,18 +278,18 @@ void controlMotors(float linear_velocity) {
   
   // Tính tốc độ góc bánh xe (rad/s)
   float wheel_angular_velocity = linear_velocity / WHEEL_RADIUS;
-  
-  // Chuyển đổi sang PWM (MOTOR_MIN_PWM đến MOTOR_MAX_PWM)
-  // Giả sử max angular velocity = MAX_LINEAR_VELOCITY / WHEEL_RADIUS
-  float max_wheel_angular = MAX_LINEAR_VELOCITY / WHEEL_RADIUS;
+
+  // Chuyển đổi sang PWM (motor_min_pwm đến MOTOR_MAX_PWM)
+  // Giả sử max angular velocity = max_linear_velocity / WHEEL_RADIUS
+  float max_wheel_angular = max_linear_velocity / WHEEL_RADIUS;
   float normalized = abs(wheel_angular_velocity / max_wheel_angular);
   normalized = constrain(normalized, 0.0, 1.0);
 
-  // Map từ 60% (153) đến 100% (255)
-  int pwm_value = MOTOR_MIN_PWM + (int)(normalized * (MOTOR_MAX_PWM - MOTOR_MIN_PWM));
+  // Map từ motor_min_pwm đến MOTOR_MAX_PWM
+  int pwm_value = motor_min_pwm + (int)(normalized * (MOTOR_MAX_PWM - motor_min_pwm));
 
   // Giới hạn PWM
-  pwm_value = constrain(pwm_value, MOTOR_MIN_PWM, MOTOR_MAX_PWM);
+  pwm_value = constrain(pwm_value, motor_min_pwm, MOTOR_MAX_PWM);
   
   // Xác định hướng quay
   // Lưu ý: Động cơ đang lắp NGƯỢC chiều, nên map:
