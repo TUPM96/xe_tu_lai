@@ -516,16 +516,17 @@ class AutonomousDrive(Node):
             self.lane_detected = False
             self.lane_center_offset = 0.0
     
-    def calculate_servo_angle_from_pid(self, error, dt):
+    def calculate_servo_angle_from_pid(self, error, dt, use_current_angle=False):
         """
         Tính toán góc servo từ lane offset error bằng PID control
         
         Args:
             error: Lane offset error (-1.0 đến 1.0, âm = lệch trái, dương = lệch phải)
             dt: Delta time (seconds)
+            use_current_angle: Nếu True, tính từ góc hiện tại thay vì từ center
         
         Returns:
-            Góc servo (degrees) trong giới hạn [servo_min_angle, servo_max_angle]
+            Góc servo (degrees) - không giới hạn nếu use_current_angle=True
         """
         # Proportional term
         p_term = self.kp * error
@@ -558,25 +559,40 @@ class AutonomousDrive(Node):
         pid_output = max(-1.0, min(1.0, pid_output))  # Clamp
         
         # Chuyển đổi sang góc servo
-        # pid_output = -1.0 -> servo_max_angle (rẽ trái tối đa)
-        # pid_output = 0.0  -> servo_center_angle (đi thẳng)
-        # pid_output = 1.0  -> servo_min_angle (rẽ phải tối đa)
-        # Đảo dấu để phù hợp với hardware
-        # Tăng servo_range để đảm bảo góc quay lớn hơn khi có error
-        servo_range = (self.servo_max_angle - self.servo_min_angle) / 2.0
-        # Đảm bảo góc servo tối thiểu 30 độ khi error lớn
-        # Nếu pid_output đạt 0.3 (30% của max), góc servo phải đạt ít nhất 30 độ
-        min_servo_range = 30.0  # Góc tối thiểu khi rẽ
-        if abs(pid_output) > 0.1:  # Nếu có error đáng kể
-            # Scale để đảm bảo góc tối thiểu
-            effective_range = max(servo_range, min_servo_range)
+        if use_current_angle:
+            # Tính từ góc hiện tại thay vì từ center
+            # pid_output: dương = tăng góc (rẽ phải), âm = giảm góc (rẽ trái)
+            current_angle = self.smoothed_servo_angle_deg
+            
+            # Tính độ thay đổi góc dựa trên PID output
+            # Tăng servo_range để đảm bảo góc quay lớn hơn khi có error
+            servo_range = (self.servo_max_angle - self.servo_min_angle) / 2.0
+            min_servo_range = 30.0  # Góc tối thiểu khi rẽ
+            
+            if abs(pid_output) > 0.1:  # Nếu có error đáng kể
+                # Scale để đảm bảo góc tối thiểu
+                effective_range = max(servo_range, min_servo_range)
+            else:
+                effective_range = servo_range
+            
+            # Điều chỉnh từ góc hiện tại
+            angle_delta = -pid_output * effective_range  # Đảo dấu để phù hợp
+            servo_angle = current_angle + angle_delta
+            
+            # KHÔNG clamp vào giới hạn - cho phép góc tự do
         else:
-            effective_range = servo_range
-        
-        servo_angle = self.servo_center_angle - pid_output * effective_range
-        
-        # Clamp vào giới hạn
-        servo_angle = max(self.servo_min_angle, min(self.servo_max_angle, servo_angle))
+            # Tính từ center (logic cũ)
+            servo_range = (self.servo_max_angle - self.servo_min_angle) / 2.0
+            min_servo_range = 30.0
+            
+            if abs(pid_output) > 0.1:
+                effective_range = max(servo_range, min_servo_range)
+            else:
+                effective_range = servo_range
+            
+            servo_angle = self.servo_center_angle - pid_output * effective_range
+            # Clamp vào giới hạn cho logic cũ
+            servo_angle = max(self.servo_min_angle, min(self.servo_max_angle, servo_angle))
         
         return servo_angle
     
@@ -614,25 +630,48 @@ class AutonomousDrive(Node):
         
         # UU TIEN PHU: Kiem tra vat can bang LiDAR (chi khi co vat can moi can thiep)
         if self.use_lidar and self.obstacle_detected:
-            # Co vat can, thuc hien tranh (tam thoi bo qua camera)
+            # Co vat can, thuc hien tranh bang cach dieu khien goc servo
             if self.obstacle_direction == 0:
-                # Vat can o giua hoac ca hai ben, lui lai va quay
+                # Vat can o giua hoac ca hai ben, lui lai va quay phai
                 cmd.linear.x = -self.max_linear_speed * 0.5
-                cmd.angular.z = self.max_angular_speed * 0.8
+                cmd.angular.z = 0.0
+                # Rẽ phải để tránh (tăng góc servo)
+                avoid_servo_angle = self.servo_center_angle + 30.0  # Rẽ phải 30 độ
+                self.smoothed_servo_angle_deg = avoid_servo_angle
+                self.last_servo_angle_deg = avoid_servo_angle
+                self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
                 self.get_logger().info('⚠️ Vat can phia truoc - Lui lai va quay phai')
             elif self.obstacle_direction < 0:
-                # Vat can ben trai, quay phai de tranh
+                # Vat can ben trai -> ne ben phai (tang goc servo) roi di thang
                 cmd.linear.x = self.max_linear_speed * 0.6
-                cmd.angular.z = -self.max_angular_speed * 0.7
-                self.get_logger().info('⚠️ Vat can ben trai - Quay phai de tranh')
+                cmd.angular.z = 0.0
+                # Rẽ phải để tránh (tăng góc servo)
+                avoid_servo_angle = self.servo_center_angle + 30.0  # Rẽ phải 30 độ
+                self.smoothed_servo_angle_deg = avoid_servo_angle
+                self.last_servo_angle_deg = avoid_servo_angle
+                self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                self.get_logger().info('⚠️ Vat can ben trai - Re phai de tranh')
             else:
-                # Vat can ben phai, quay trai de tranh
+                # Vat can ben phai -> re trai (giam goc servo) roi di tiep
                 cmd.linear.x = self.max_linear_speed * 0.6
-                cmd.angular.z = self.max_angular_speed * 0.7
-                self.get_logger().info('⚠️ Vat can ben phai - Quay trai de tranh')
+                cmd.angular.z = 0.0
+                # Rẽ trái để tránh (giảm góc servo)
+                avoid_servo_angle = self.servo_center_angle - 30.0  # Rẽ trái 30 độ
+                self.smoothed_servo_angle_deg = avoid_servo_angle
+                self.last_servo_angle_deg = avoid_servo_angle
+                self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                self.get_logger().info('⚠️ Vat can ben phai - Re trai de tranh')
         else:
             # KHÔNG có vật cản (hoặc đã tắt LiDAR) - Sử dụng PID để điều khiển góc servo
-            if self.use_camera and self.lane_detected:
+            if not self.use_camera:
+                # Không enable camera -> đi thẳng
+                cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
+                cmd.angular.z = 0.0
+                # Đặt servo về góc giữa để đi thẳng
+                self.smoothed_servo_angle_deg = self.servo_center_angle
+                self.last_servo_angle_deg = self.servo_center_angle
+                self.servo_angle_pub.publish(Float32(data=self.servo_center_angle))
+            elif self.use_camera and self.lane_detected:
                 # Tính toán error từ lane offset
                 # smoothed_lane_offset: âm = lệch trái, dương = lệch phải
                 # error cho PID: dương = cần rẽ phải, âm = cần rẽ trái
@@ -646,8 +685,8 @@ class AutonomousDrive(Node):
                 else:
                     error = raw_error
                 
-                # Tính góc servo từ PID
-                target_servo_angle = self.calculate_servo_angle_from_pid(error, dt)
+                # Tính góc servo từ PID dựa trên góc hiện tại, không phải từ center
+                target_servo_angle = self.calculate_servo_angle_from_pid(error, dt, use_current_angle=True)
                 
                 # Làm mượt góc servo để tránh chuyển góc quá gấp
                 alpha = self.servo_angle_smoothing
@@ -693,7 +732,7 @@ class AutonomousDrive(Node):
                         f'{direction_str}, Speed: {cmd.linear.x:.2f} m/s'
                     )
                     self.last_lane_log_time = current_time
-            else:
+            elif self.use_camera:
                 # Không phát hiện được vạch kẻ đường -> DỪNG LẠI
                 cmd.linear.x = 0.0
                 cmd.angular.z = 0.0
@@ -702,11 +741,10 @@ class AutonomousDrive(Node):
                 self.last_servo_angle_deg = self.servo_center_angle
                 self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
                 
-                if self.use_camera:
-                    # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
-                    if current_time - self.last_lane_log_time >= 2.0:
-                        self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
-                        self.last_lane_log_time = current_time
+                # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
+                if current_time - self.last_lane_log_time >= 2.0:
+                    self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
+                    self.last_lane_log_time = current_time
         
         self.cmd_vel_pub.publish(cmd)
 
