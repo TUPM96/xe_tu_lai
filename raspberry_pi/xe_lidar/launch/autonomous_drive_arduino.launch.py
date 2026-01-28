@@ -145,8 +145,8 @@ def generate_launch_description():
 
     lane_threshold_c_arg = DeclareLaunchArgument(
         'lane_threshold_c',
-        default_value='25',
-        description='Nguong C cho lane detection (cao hon = chi nhan mau den hon)'
+        default_value='15',
+        description='Nguong C cho lane detection (cao hon = chi nhan mau den hon, mac dinh 15 de nhan duoc nhieu mau den hon)'
     )
 
     # Tham số làm mượt steering để tránh giật
@@ -206,6 +206,13 @@ def generate_launch_description():
         'cornering_speed_factor',
         default_value='0.6',
         description='He so giam toc khi vao cua (0.0-1.0), vi du 0.6 = 60% toc do'
+    )
+
+    # Hệ số tốc độ khi đi thẳng
+    straight_speed_factor_arg = DeclareLaunchArgument(
+        'straight_speed_factor',
+        default_value='1.0',
+        description='He so toc do khi di thang (0.0-1.0), vi du 0.7 = 70% toc do toi da khi di thang'
     )
 
     # Tham số góc servo
@@ -276,6 +283,7 @@ def generate_launch_description():
             'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
             'lane_dead_zone': LaunchConfiguration('lane_dead_zone'),
             'cornering_speed_factor': LaunchConfiguration('cornering_speed_factor'),
+            'straight_speed_factor': LaunchConfiguration('straight_speed_factor'),
             # Tham số góc servo
             'servo_center_angle': LaunchConfiguration('servo_center_angle'),
             'servo_min_angle': LaunchConfiguration('servo_min_angle'),
@@ -320,6 +328,7 @@ def generate_launch_description():
         ki_arg,
         kd_arg,
         cornering_speed_factor_arg,
+        straight_speed_factor_arg,
         servo_center_angle_arg,
         servo_min_angle_arg,
         servo_max_angle_arg,

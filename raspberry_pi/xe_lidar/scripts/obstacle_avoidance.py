@@ -37,12 +37,15 @@ class AutonomousDrive(Node):
         self.declare_parameter('ki', 0.0)   # Integral gain
         self.declare_parameter('kd', 0.1)  # Derivative gain
         # Tham số lane detection - C càng cao thì chỉ nhận màu đen hơn (loại bỏ xám)
-        self.declare_parameter('lane_threshold_c', 25)  # Giá trị C trong adaptive threshold
+        # Giảm giá trị mặc định để nhận được nhiều màu đen hơn
+        self.declare_parameter('lane_threshold_c', 15)  # Giá trị C trong adaptive threshold (giảm từ 25 xuống 15)
         # Tham số làm mượt (smoothing) để tránh phản ứng quá nhanh
         self.declare_parameter('lane_offset_smoothing', 0.7)  # 0.0=không smooth, 0.9=rất smooth
         self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
         # Hệ số giảm tốc khi vào cua (0.0 - 1.0), ví dụ 0.5 = giảm còn 50% tốc độ khi đang đánh lái
         self.declare_parameter('cornering_speed_factor', 0.6)
+        # Hệ số tốc độ khi đi thẳng (0.0 - 1.0), ví dụ 0.7 = 70% tốc độ tối đa khi đi thẳng
+        self.declare_parameter('straight_speed_factor', 1.0)
         # Tham số góc servo (degree) - giới hạn và góc giữa
         self.declare_parameter('servo_center_angle', 100.0)  # Góc giữa (đi thẳng)
         self.declare_parameter('servo_min_angle', 45.0)      # Góc tối thiểu (rẽ trái tối đa)
@@ -66,6 +69,7 @@ class AutonomousDrive(Node):
         self.lane_offset_smoothing = float(self.get_parameter('lane_offset_smoothing').value)
         self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
         self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
+        self.straight_speed_factor = float(self.get_parameter('straight_speed_factor').value)
         self.servo_center_angle = float(self.get_parameter('servo_center_angle').value)
         self.servo_min_angle = float(self.get_parameter('servo_min_angle').value)
         self.servo_max_angle = float(self.get_parameter('servo_max_angle').value)
@@ -278,6 +282,7 @@ class AutonomousDrive(Node):
 
             # Dung Adaptive Threshold de tu dong dieu chinh theo anh sang
             # C cao hon = chi nhan mau den hon (loai bo xam)
+            # Giảm C để nhận được nhiều màu đen hơn (bao gồm cả xám đen)
             black_mask = cv2.adaptiveThreshold(
                 gray_blurred,
                 255,
@@ -286,6 +291,12 @@ class AutonomousDrive(Node):
                 blockSize=25,
                 C=self.lane_threshold_c
             )
+            
+            # Thử thêm threshold đơn giản để bắt màu đen nếu adaptive threshold không đủ
+            # Nếu adaptive threshold quá khó, dùng thêm simple threshold
+            _, simple_thresh = cv2.threshold(gray_blurred, 80, 255, cv2.THRESH_BINARY_INV)
+            # Kết hợp cả hai mask (OR operation)
+            black_mask = cv2.bitwise_or(black_mask, simple_thresh)
 
             # Morphological operations de lam sach mask va noi cac vung gan nhau
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
@@ -295,8 +306,8 @@ class AutonomousDrive(Node):
             # Tim tat ca contours (vung den)
             contours, _ = cv2.findContours(black_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            # Loc contours theo dien tich (loai bo nhieu nho)
-            min_contour_area = 500  # pixels
+            # Loc contours theo dien tich (loai bo nhieu nho) - giảm ngưỡng để nhận được vạch nhỏ hơn
+            min_contour_area = 200  # pixels - giảm từ 500 xuống 200 để nhận được vạch nhỏ hơn
             valid_contours = [c for c in contours if cv2.contourArea(c) > min_contour_area]
 
             # Phan loai contours thanh ben trai va ben phai
@@ -391,6 +402,7 @@ class AutonomousDrive(Node):
             right_text = f"R:{right_bottom_x:.0f}" if right_bottom_x else "R:--"
             offset_text = f"Raw:{self.lane_center_offset:.2f} Smooth:{self.smoothed_lane_offset:.2f}"
             servo_text = f"Servo: {self.smoothed_servo_angle_deg:.1f}°"
+            contour_count_text = f"Contours: {len(valid_contours)} (L:{len(left_contours)} R:{len(right_contours)})"
 
             cv2.putText(image_with_lanes, f"{status_text} | {left_text} | {right_text}", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
@@ -398,6 +410,15 @@ class AutonomousDrive(Node):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             cv2.putText(image_with_lanes, servo_text, (10, 90),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            cv2.putText(image_with_lanes, contour_count_text, (10, 120),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+            
+            # Vẽ mask để debug (hiển thị ở góc trên bên phải)
+            mask_display = cv2.resize(black_mask, (160, 120))
+            mask_colored = cv2.cvtColor(mask_display, cv2.COLOR_GRAY2BGR)
+            image_with_lanes[10:130, width-170:width-10] = mask_colored
+            cv2.putText(image_with_lanes, "MASK", (width-165, 25),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
             # Ve huong can di
             if self.lane_detected:
@@ -431,10 +452,10 @@ class AutonomousDrive(Node):
                     direction_text = f"RE TRAI ({servo_offset_from_center:.1f}°)"
                     direction_color = (255, 165, 0)
 
-                cv2.putText(image_with_lanes, direction_text, (10, 120),
+                cv2.putText(image_with_lanes, direction_text, (10, 150),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, direction_color, 2)
             else:
-                cv2.putText(image_with_lanes, "KHONG THAY LANE", (10, 120),
+                cv2.putText(image_with_lanes, "KHONG THAY LANE", (10, 150),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             # Publish anh da ve
@@ -565,13 +586,22 @@ class AutonomousDrive(Node):
                 self.last_servo_angle_deg = self.smoothed_servo_angle_deg
                 self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
                 
-                # Tính tốc độ dựa trên góc lái (giảm tốc khi vào cua)
+                # Tính tốc độ dựa trên góc lái (giảm tốc khi vào cua, giảm tốc khi đi thẳng)
                 servo_offset_from_center = abs(self.smoothed_servo_angle_deg - self.servo_center_angle)
                 max_servo_offset = (self.servo_max_angle - self.servo_min_angle) / 2.0
-                cornering_factor = 1.0 - (servo_offset_from_center / max_servo_offset) * (1.0 - self.cornering_speed_factor)
-                cornering_factor = max(self.cornering_speed_factor, min(1.0, cornering_factor))
                 
-                cmd.linear.x = self.max_linear_speed * cornering_factor
+                # Nếu đi thẳng (góc servo gần center)
+                if servo_offset_from_center < 3.0:  # Trong vùng 3 độ từ center
+                    # Áp dụng hệ số tốc độ khi đi thẳng
+                    speed_factor = self.straight_speed_factor
+                else:
+                    # Đang vào cua - tính hệ số giảm tốc dựa trên góc lái
+                    cornering_factor = 1.0 - (servo_offset_from_center / max_servo_offset) * (1.0 - self.cornering_speed_factor)
+                    cornering_factor = max(self.cornering_speed_factor, min(1.0, cornering_factor))
+                    # Kết hợp với straight_speed_factor để có tốc độ tối đa khi vào cua
+                    speed_factor = cornering_factor * self.straight_speed_factor
+                
+                cmd.linear.x = self.max_linear_speed * speed_factor
                 cmd.angular.z = 0.0  # Không dùng angular, chỉ dùng góc servo trực tiếp
                 
                 # Log định kỳ về lane detection (mỗi 2 giây)
