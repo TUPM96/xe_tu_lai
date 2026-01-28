@@ -269,12 +269,15 @@ void controlMotors(float linear_velocity) {
   pwm_value = constrain(pwm_value, MOTOR_MIN_PWM, MOTOR_MAX_PWM);
   
   // Xác định hướng quay
+  // Lưu ý: Động cơ đang lắp NGƯỢC chiều, nên map:
+  //  - linear_velocity > 0  (tiến)  -> setMotorsBackward
+  //  - linear_velocity < 0  (lùi)   -> setMotorsForward
   if (linear_velocity > 0) {
-    // Tiến
-    setMotorsForward(pwm_value);
-  } else {
-    // Lùi
+    // Lệnh tiến nhưng động cơ lắp ngược -> dùng hàm lùi
     setMotorsBackward(pwm_value);
+  } else {
+    // Lệnh lùi -> dùng hàm tiến
+    setMotorsForward(pwm_value);
   }
 }
 
