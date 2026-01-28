@@ -2,7 +2,6 @@
 """
 ROS2 Camera Node sử dụng OpenCV (KHÔNG CẦN cv_bridge)
 Publish ảnh từ USB camera lên topic /camera/image_raw
-Sử dụng threaded capture để giảm giật khung hình
 """
 
 import rclpy
@@ -11,7 +10,6 @@ from sensor_msgs.msg import Image, CameraInfo
 import cv2
 import numpy as np
 import sys
-import threading
 
 
 class CameraNode(Node):
@@ -33,34 +31,17 @@ class CameraNode(Node):
 
         self.get_logger().info(f'Dang mo camera {video_device} voi width={width}, height={height}, fps={fps}')
 
-        # Lấy index từ video device (vd: /dev/video0 -> 0)
-        try:
-            cam_index = int(video_device.replace('/dev/video', ''))
-        except:
-            cam_index = 0
-
-        # Mở camera với V4L2 backend
-        self.cap = cv2.VideoCapture(cam_index, cv2.CAP_V4L2)
-
-        if not self.cap.isOpened():
-            self.get_logger().warn(f'V4L2 khong mo duoc, thu path truc tiep...')
-            self.cap = cv2.VideoCapture(video_device)
+        # Mở camera
+        self.cap = cv2.VideoCapture(video_device)
 
         if not self.cap.isOpened():
             self.get_logger().error(f'Khong the mo camera tai {video_device}')
             sys.exit(1)
 
-        # Set MJPG codec TRƯỚC KHI set resolution (bắt buộc cho HD/Full HD)
-        fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
-        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
-
         # Set resolution và fps
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
-
-        # Set buffer size = 1 để luôn lấy frame mới nhất (giảm latency)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         # Lấy resolution thực tế từ camera
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -84,26 +65,11 @@ class CameraNode(Node):
         # Tạo CameraInfo message với tham số mặc định (có thể calibrate sau)
         self.camera_info = self.create_camera_info()
 
-        # Threaded capture để giảm giật
-        self.frame = None
-        self.frame_lock = threading.Lock()
-        self.running = True
-        self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self.capture_thread.start()
-
         # Timer để publish ảnh
         timer_period = 1.0 / fps
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
-        self.get_logger().info('Camera Node da khoi dong! (Threaded capture, KHONG CAN cv_bridge)')
-
-    def _capture_loop(self):
-        """Thread liên tục đọc frame từ camera"""
-        while self.running:
-            ret, frame = self.cap.read()
-            if ret and frame is not None:
-                with self.frame_lock:
-                    self.frame = frame
+        self.get_logger().info('Camera Node da khoi dong! (KHONG CAN cv_bridge)')
 
     def cv2_to_imgmsg(self, cv_image, encoding="bgr8"):
         """
@@ -164,32 +130,25 @@ class CameraNode(Node):
         return camera_info
 
     def timer_callback(self):
-        # Lấy frame từ thread capture
-        with self.frame_lock:
-            if self.frame is None:
-                return
-            frame = self.frame.copy()
+        ret, frame = self.cap.read()
+        if ret:
+            try:
+                # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
+                ros_image = self.cv2_to_imgmsg(frame, "bgr8")
+                current_time = self.get_clock().now().to_msg()
+                ros_image.header.stamp = current_time
+                ros_image.header.frame_id = self.frame_id
 
-        try:
-            # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
-            ros_image = self.cv2_to_imgmsg(frame, "bgr8")
-            current_time = self.get_clock().now().to_msg()
-            ros_image.header.stamp = current_time
-            ros_image.header.frame_id = self.frame_id
+                # Publish image
+                self.image_publisher.publish(ros_image)
 
-            # Publish image
-            self.image_publisher.publish(ros_image)
-
-            # Publish camera_info (đồng bộ với image)
-            self.camera_info.header.stamp = current_time
-            self.camera_info_publisher.publish(self.camera_info)
-        except Exception as e:
-            self.get_logger().error(f'Loi convert anh: {str(e)}')
+                # Publish camera_info (đồng bộ với image)
+                self.camera_info.header.stamp = current_time
+                self.camera_info_publisher.publish(self.camera_info)
+            except Exception as e:
+                self.get_logger().error(f'Loi convert anh: {str(e)}')
 
     def destroy_node(self):
-        self.running = False
-        if self.capture_thread.is_alive():
-            self.capture_thread.join(timeout=1.0)
         if self.cap:
             self.cap.release()
         super().destroy_node()
