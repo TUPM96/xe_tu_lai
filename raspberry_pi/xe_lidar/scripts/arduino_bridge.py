@@ -380,9 +380,6 @@ class ArduinoBridge(Node):
     def servo_cmd_callback(self, msg: Float32):
         """Nhận lệnh góc servo từ topic /servo_angle_cmd và gửi S:angle tới Arduino"""
         self.send_servo_angle(msg.data)
-        
-        # Cập nhật thời gian
-        self.last_odom_time = current_time
 
     def publish_joint_states(self):
         """Publish joint states dựa trên cmd_vel"""
