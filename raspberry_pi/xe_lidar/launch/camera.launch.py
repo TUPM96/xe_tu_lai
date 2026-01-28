@@ -8,8 +8,8 @@ from launch.actions import DeclareLaunchArgument
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('video_device', default_value='/dev/video0'),
-        DeclareLaunchArgument('width', default_value='1920', description='Image width (default: 1920)'),
-        DeclareLaunchArgument('height', default_value='1080', description='Image height (default: 1080)'),
+        DeclareLaunchArgument('width', default_value='1280', description='Image width (default: 1280 - HD)'),
+        DeclareLaunchArgument('height', default_value='720', description='Image height (default: 720 - HD)'),
         DeclareLaunchArgument('fps', default_value='30', description='Frames per second'),
         
         # Static transform từ base_link đến camera_link_optical (cần cho rviz)

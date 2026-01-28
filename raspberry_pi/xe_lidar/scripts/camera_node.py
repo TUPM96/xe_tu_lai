@@ -16,10 +16,10 @@ class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
-        # Parameters - Mặc định 1920x1080 (Full HD)
+        # Parameters - Mặc định 1280x720 (HD) - resolution cao nhất mà camera hỗ trợ với MJPG
         self.declare_parameter('video_device', '/dev/video0')
-        self.declare_parameter('width', 1920)
-        self.declare_parameter('height', 1080)
+        self.declare_parameter('width', 1280)
+        self.declare_parameter('height', 720)
         self.declare_parameter('fps', 30)
         self.declare_parameter('frame_id', 'camera_link_optical')
 
