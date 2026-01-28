@@ -373,12 +373,11 @@ ros2 run xe_lidar start_lidar.py --port /dev/ttyUSB0
 
 **Terminal 3 - Camera:**
 ```bash
+# Camera Full HD 1920x1080 (mặc định)
 ros2 run xe_lidar start_camera.py --device /dev/video0
 
-# Camera full resolution (mặc định)
-ros2 run xe_lidar start_camera.py --device /dev/video0
-
-# Hoặc giới hạn resolution
+# Hoặc chọn resolution khác
+ros2 run xe_lidar start_camera.py --device /dev/video0 --width 1280 --height 720
 ros2 run xe_lidar start_camera.py --device /dev/video0 --width 640 --height 480
 ```
 
