@@ -63,6 +63,9 @@ class AutonomousDrive(Node):
         self.lane_error_prev = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
+        # Lưu contour lane của frame trước để tăng ổn định
+        self.prev_left_contour = None
+        self.prev_right_contour = None
         
         # Subscribers
         if self.use_lidar:
@@ -233,7 +236,12 @@ class AutonomousDrive(Node):
         return img_msg
     
     def process_camera_lane_detection(self, image):
-        """Xu ly camera de phat hien 2 vach DEN 2 ben duong va dieu chinh di giua duong"""
+        """
+        Xử lý camera theo kiểu "dò 2 line" bằng contour:
+        - Tìm vạch trái/phải bằng threshold + morphology
+        - Nối các điểm giữa (mid_points) để tạo đường giữa lane
+        - Tính góc của đường giữa và ánh xạ thành offset điều khiển
+        """
         if image is None:
             return
 
@@ -241,196 +249,161 @@ class AutonomousDrive(Node):
             height, width = image.shape[:2]
             image_with_lanes = image.copy()
 
-            # Tao vung quan tam (ROI) - phan duoi anh (vung duong)
-            roi_top = int(height * 0.4)  # Bat dau tu 40% chieu cao
-            roi_bottom = height
-            roi = image[roi_top:roi_bottom, :]
+            # Chuyển sang grayscale và làm mờ
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-            # Chuyen sang Grayscale de phat hien vach den
-            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            # Ngưỡng nhị phân (vạch tối trên nền sáng)
+            # Có thể tinh chỉnh thêm bằng lane_threshold_c nếu cần
+            _, mask = cv2.threshold(blur, 70, 255, cv2.THRESH_BINARY_INV)
 
-            # Ap dung Gaussian blur truoc de giam nhieu
-            gray_blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            # Đóng morphology để nối các đoạn đứt
+            kernel = np.ones((5, 5), np.uint8)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-            # Dung Adaptive Threshold de tu dong dieu chinh theo anh sang
-            # C cao hon = chi nhan mau den hon (loai bo xam)
-            black_mask = cv2.adaptiveThreshold(
-                gray_blurred,
-                255,
-                cv2.ADAPTIVE_THRESH_MEAN_C,
-                cv2.THRESH_BINARY_INV,
-                blockSize=25,
-                C=self.lane_threshold_c  # Co the dieu chinh tu launch file
-            )
+            # Tìm contour
+            contours, _ = cv2.findContours(mask.copy(),
+                                           cv2.RETR_TREE,
+                                           cv2.CHAIN_APPROX_SIMPLE)
 
-            # Ap dung them mot lan blur de lam min mask
-            blurred = cv2.GaussianBlur(black_mask, (5, 5), 0)
+            left_contour = None
+            right_contour = None
+            center_x = width // 2
 
-            # Phat hien canh bang Canny
-            edges = cv2.Canny(blurred, 50, 150)
+            if len(contours) > 0:
+                for contour in contours:
+                    x, y, w, h = cv2.boundingRect(contour)
+                    # Lọc bỏ nhiễu nhỏ
+                    if h > 30 and cv2.contourArea(contour) > 500:
+                        cx = x + w // 2
+                        if cx < center_x:
+                            left_contour = contour
+                        elif cx > center_x:
+                            right_contour = contour
 
-            # Phat hien duong thang bang HoughLinesP
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20,
-                                   minLineLength=30, maxLineGap=20)
+            # Nếu frame hiện tại mất vạch thì dùng lại contour frame trước
+            if left_contour is None and self.prev_left_contour is not None:
+                left_contour = self.prev_left_contour
+            if right_contour is None and self.prev_right_contour is not None:
+                right_contour = self.prev_right_contour
 
-            # Phan loai duong thang thanh ben trai va ben phai
-            left_lines = []
-            right_lines = []
-            center_x = width / 2
+            self.prev_left_contour = left_contour
+            self.prev_right_contour = right_contour
 
-            if lines is not None and len(lines) > 0:
-                for line in lines:
-                    x1, y1, x2, y2 = line[0]
-                    mid_x = (x1 + x2) / 2
+            mid_points = []
+            angle_deg = 0.0
+            huong = "Di thang"
 
-                    # Tinh slope (xu ly truong hop duong thang dung)
-                    if abs(x2 - x1) < 1:
-                        slope = 999  # Duong gan nhu thang dung
+            if left_contour is not None and right_contour is not None:
+                # Vẽ 2 vạch
+                cv2.drawContours(image_with_lanes, [left_contour], -1, (255, 0, 0), 2)
+                cv2.drawContours(image_with_lanes, [right_contour], -1, (0, 0, 255), 2)
+
+                left_points = left_contour[:, 0, :]
+                right_points = right_contour[:, 0, :]
+                left_points = sorted(left_points, key=lambda p: p[1])
+                right_points = sorted(right_points, key=lambda p: p[1])
+
+                lp_idx, rp_idx = 0, 0
+                while lp_idx < len(left_points) and rp_idx < len(right_points):
+                    lp = left_points[lp_idx]
+                    rp = right_points[rp_idx]
+                    # Ghép các điểm có cùng cao độ (y gần nhau)
+                    if abs(lp[1] - rp[1]) < 5:
+                        mid_x = (lp[0] + rp[0]) // 2
+                        mid_y = lp[1]
+                        mid_points.append((mid_x, mid_y))
+                        lp_idx += 1
+                        rp_idx += 1
+                    elif lp[1] < rp[1]:
+                        lp_idx += 1
                     else:
-                        slope = (y2 - y1) / (x2 - x1)
+                        rp_idx += 1
 
-                    # Chi nhan cac duong co do nghieng lon (gan thang dung)
-                    if abs(slope) > 0.5 or abs(slope) == 999:
-                        # Phan loai theo vi tri x
-                        if mid_x < center_x:  # Duong ben trai
-                            left_lines.append(line[0])
-                            cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (255, 0, 0), 3)
-                        else:  # Duong ben phai
-                            right_lines.append(line[0])
-                            cv2.line(image_with_lanes, (x1, y1 + roi_top), (x2, y2 + roi_top), (0, 0, 255), 3)
+                # Vẽ đường giữa (midline)
+                for i in range(1, len(mid_points)):
+                    cv2.line(image_with_lanes, mid_points[i - 1], mid_points[i],
+                             (0, 255, 0), 2)
 
-            # Tinh diem trung binh cua cac duong o duoi cung cua ROI
-            left_x_points = []
-            right_x_points = []
+                if len(mid_points) > 2:
+                    pt_start = mid_points[0]
+                    pt_end = mid_points[-1]
+                    cv2.circle(image_with_lanes, pt_start, 7, (0, 255, 255), -1)
+                    cv2.circle(image_with_lanes, pt_end, 7, (0, 255, 255), -1)
+                    cv2.line(image_with_lanes, pt_start, pt_end, (0, 255, 255), 3)
 
-            # Lay diem o duoi cung (y lon nhat) cua moi duong
-            for line in left_lines:
-                x1, y1, x2, y2 = line
-                if y1 > y2:
-                    left_x_points.append(x1)
+                    dx = pt_end[0] - pt_start[0]
+                    dy = pt_end[1] - pt_start[1]
+                    if dy != 0:
+                        angle_deg = float(np.degrees(np.arctan2(-dx, dy)))
+                    else:
+                        angle_deg = 0.0
+
+                    # Giảm bớt độ nhạy góc
+                    angle_deg *= 0.7
+
+                    # Ngưỡng để xác định rẽ hay đi thẳng
+                    angle_threshold = 7.0
+                    if angle_deg < -angle_threshold:
+                        huong = "Re trai"
+                    elif angle_deg > angle_threshold:
+                        huong = "Re phai"
+                    else:
+                        huong = "Di thang"
+
+                    # Ánh xạ góc sang offset chuẩn hóa [-1, 1] cho bộ điều khiển
+                    MAX_VISUAL_ANGLE = 45.0
+                    offset = np.clip(angle_deg / MAX_VISUAL_ANGLE, -1.0, 1.0)
+                    self.lane_center_offset = offset
+                    self.lane_detected = True
                 else:
-                    left_x_points.append(x2)
-
-            for line in right_lines:
-                x1, y1, x2, y2 = line
-                if y1 > y2:
-                    right_x_points.append(x1)
-                else:
-                    right_x_points.append(x2)
-
-            # Tinh offset tu giua duong
-            lane_center = None
-            if left_x_points and right_x_points:
-                # Co ca 2 vach ke duong - di giua
-                left_x_avg = np.mean(left_x_points)
-                right_x_avg = np.mean(right_x_points)
-                lane_center = (left_x_avg + right_x_avg) / 2
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)
-                self.lane_detected = True
-
-                # Ve duong giua lan (mau vang)
-                center_y_bottom = height
-                center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom),
-                        (int(lane_center), center_y_top), (0, 255, 255), 3)
-
-                # Ve duong giua man hinh (mau xanh la)
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
-                        (int(center_x), center_y_top), (0, 255, 0), 2)
-            elif left_x_points:
-                # Chi co vach ben trai
-                left_x_avg = np.mean(left_x_points)
-                lane_center = left_x_avg + 200
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)
-                self.lane_detected = True
-
-                center_y_bottom = height
-                center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom),
-                        (int(lane_center), center_y_top), (0, 255, 255), 3)
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
-                        (int(center_x), center_y_top), (0, 255, 0), 2)
-            elif right_x_points:
-                # Chi co vach ben phai
-                right_x_avg = np.mean(right_x_points)
-                lane_center = right_x_avg - 200
-                self.lane_center_offset = (lane_center - center_x) / (width / 2)
-                self.lane_detected = True
-
-                center_y_bottom = height
-                center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(lane_center), center_y_bottom),
-                        (int(lane_center), center_y_top), (0, 255, 255), 3)
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
-                        (int(center_x), center_y_top), (0, 255, 0), 2)
+                    self.lane_detected = False
+                    self.lane_center_offset = 0.0
             else:
                 self.lane_detected = False
                 self.lane_center_offset = 0.0
-                # Ve duong giua man hinh
-                center_y_bottom = height
-                center_y_top = roi_top
-                cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
-                        (int(center_x), center_y_top), (0, 255, 0), 2)
 
-            # Ap dung bo loc lam muot (exponential moving average)
-            # smoothed = alpha * previous + (1 - alpha) * new
+            # Bộ lọc mượt EMA cho offset
             alpha = self.lane_offset_smoothing
             self.smoothed_lane_offset = alpha * self.smoothed_lane_offset + (1 - alpha) * self.lane_center_offset
 
-            # Ve text thong tin
+            # Text debug
             status_text = "Phat hien lan duong" if self.lane_detected else "Khong phat hien lan"
-            offset_text = f"Raw: {self.lane_center_offset:.2f} | Smooth: {self.smoothed_lane_offset:.2f}"
+            offset_text = f"Raw: {self.lane_center_offset:.2f} | Smooth: {self.smoothed_lane_offset:.2f} | Angle:{angle_deg:.1f}"
             cv2.putText(image_with_lanes, status_text, (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             cv2.putText(image_with_lanes, offset_text, (10, 60),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            
-            # Ve huong can di - dung smoothed offset de hien thi chinh xac hon
-            if self.lane_detected:
-                # Tinh vi tri de ve mui ten chi huong
-                arrow_x = int(center_x)
-                arrow_y = int(height * 0.75)  # Vi tri o 75% chieu cao
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                # Tinh do lech de ve mui ten (scale offset) - su dung huong STEERING that
-                # Da dao dau trong vong dieu khien, nen o day cung dung gia tri dao
-                steering_offset = -self.smoothed_lane_offset
-                offset_pixels = int(steering_offset * width * 0.4)  # Scale offset
-                arrow_end_x = arrow_x + offset_pixels
-                arrow_end_y = arrow_y - 60  # Mui ten huong len tren
+            # Mũi tên chỉ hướng dựa trên angle_deg (không dùng dead zone hiển thị)
+            arrow_x = int(width / 2)
+            arrow_y = int(height * 0.75)
+            steering_offset = np.clip(angle_deg / 45.0, -1.0, 1.0)
+            offset_pixels = int(steering_offset * width * 0.4)
+            arrow_end_x = arrow_x + offset_pixels
+            arrow_end_y = arrow_y - 60
 
-                # Ve mui ten chi huong (mau vang, day)
-                if abs(offset_pixels) > 5:  # Chi ve mui ten neu co offset
-                    cv2.arrowedLine(image_with_lanes,
-                                   (arrow_x, arrow_y),
-                                   (arrow_end_x, arrow_end_y),
-                                   (0, 255, 255), 5, tipLength=0.3)
+            if abs(offset_pixels) > 3:
+                cv2.arrowedLine(image_with_lanes,
+                                (arrow_x, arrow_y),
+                                (arrow_end_x, arrow_end_y),
+                                (0, 255, 255), 5, tipLength=0.3)
 
-                # Text huong di - dung steering_offset (cung chieu voi huong quay that)
-                # Ở đây KHÔNG dùng lane_dead_zone, chỉ dùng ngưỡng rất nhỏ để hiển thị "Đi thẳng",
-                # để overlay luôn cho thấy đang thiên trái/phải dù servo có thể chưa đánh lái vì dead zone.
-                if abs(steering_offset) < 0.02:
-                    direction_text = "Di thang"
-                    direction_color = (0, 255, 0)  # Xanh la
-                elif steering_offset > 0:
-                    direction_text = f"Re trai ({abs(steering_offset):.2f})"
-                    direction_color = (255, 165, 0)  # Mau cam
-                else:
-                    direction_text = f"Re phai ({abs(steering_offset):.2f})"
-                    direction_color = (255, 165, 0)  # Mau cam
-                
-                cv2.putText(image_with_lanes, direction_text, (10, 90), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, direction_color, 2)
+            direction_text = huong
+            if huong == "Di thang":
+                direction_color = (0, 255, 0)
             else:
-                cv2.putText(image_with_lanes, "Khong xac dinh duoc huong", (10, 90), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            
-            # Publish anh da ve
+                direction_color = (255, 165, 0)
+            cv2.putText(image_with_lanes, direction_text, (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, direction_color, 2)
+
+            # Publish ảnh debug
             if hasattr(self, 'image_debug_pub'):
                 ros_image = self.cv2_to_imgmsg(image_with_lanes, "bgr8")
                 ros_image.header.stamp = self.get_clock().now().to_msg()
                 ros_image.header.frame_id = "camera_link_optical"
                 self.image_debug_pub.publish(ros_image)
-                
+
         except Exception as e:
             self.get_logger().debug(f'Loi xu ly camera: {str(e)}')
             self.lane_detected = False
@@ -497,31 +470,15 @@ class AutonomousDrive(Node):
                 # - lane_center_offset < 0: xe lệch TRÁI → cần quay PHẢI (angular.z < 0)
                 # - ROS2 convention: angular.z dương = quay trái, angular.z âm = quay phải
 
-                # Bộ điều khiển PID cho bám làn - dùng smoothed offset để tránh giật
+                # Điều khiển P thuần cho bám làn - dùng smoothed offset để tránh giật
                 error = float(self.smoothed_lane_offset)
-                # Ap dung dead zone CHI cho dieu khien (khong thay doi gia tri smoothed goc)
+                # Áp dụng dead zone CHỈ cho điều khiển (không thay đổi smoothed gốc)
                 if abs(error) < self.lane_dead_zone:
                     error = 0.0
-                # Cộng dồn sai lệch (thành phần I), có giới hạn để tránh bão hòa
-                self.lane_error_integral += error * dt
-                # Giới hạn tích phân để tránh quá lớn
-                self.lane_error_integral = max(-1.0, min(1.0, self.lane_error_integral))
-                # Thành phần đạo hàm
-                derivative = 0.0
-                if dt > 0.0:
-                    derivative = (error - self.lane_error_prev) / dt
-                self.lane_error_prev = error
 
-                # Tính angular theo PID: angular = Kp*e + Ki*∫e dt + Kd*de/dt
-                # Lưu ý: nếu xe đang rẽ NGƯỢC hướng mong muốn trên thực tế,
-                # việc đảo dấu ở đây sẽ đảo chiều đánh lái.
-                desired_angular = -(
-                    self.kp * error +
-                    self.ki * self.lane_error_integral +
-                    self.kd * derivative
-                )
-                # Giảm nhẹ biên độ theo max_angular_speed
-                desired_angular *= self.max_angular_speed
+                # Điều khiển P: angular ~ Kp * error (đã nhân max_angular_speed)
+                # Đảo dấu để khớp với hướng servo/Arduino thực tế
+                desired_angular = -self.kp * error * self.max_angular_speed
 
                 # Giới hạn angular velocity theo max_steer_angle của Ackermann
                 # Giả sử wheelbase = 0.4m, vận tốc max = 0.3 m/s
