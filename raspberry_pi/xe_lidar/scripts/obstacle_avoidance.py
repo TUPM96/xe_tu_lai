@@ -377,10 +377,6 @@ class AutonomousDrive(Node):
             alpha = self.lane_offset_smoothing
             self.smoothed_lane_offset = alpha * self.smoothed_lane_offset + (1 - alpha) * self.lane_center_offset
 
-            # Ap dung dead zone - neu offset qua nho thi coi nhu 0
-            if abs(self.smoothed_lane_offset) < self.lane_dead_zone:
-                self.smoothed_lane_offset = 0.0
-
             # Ve text thong tin
             status_text = "Phat hien lan duong" if self.lane_detected else "Khong phat hien lan"
             offset_text = f"Raw: {self.lane_center_offset:.2f} | Smooth: {self.smoothed_lane_offset:.2f}"
@@ -501,6 +497,9 @@ class AutonomousDrive(Node):
 
                 # Bộ điều khiển PID cho bám làn - dùng smoothed offset để tránh giật
                 error = float(self.smoothed_lane_offset)
+                # Ap dung dead zone CHI cho dieu khien (khong thay doi gia tri smoothed goc)
+                if abs(error) < self.lane_dead_zone:
+                    error = 0.0
                 # Cộng dồn sai lệch (thành phần I), có giới hạn để tránh bão hòa
                 self.lane_error_integral += error * dt
                 # Giới hạn tích phân để tránh quá lớn
@@ -546,14 +545,14 @@ class AutonomousDrive(Node):
                     )
                     self.last_lane_log_time = current_time
             else:
-                # Khong phat hien duoc vach ke duong, di thang voi toc do day du
-                cmd.linear.x = self.max_linear_speed
+                # Khong phat hien duoc vach ke duong -> DUNG LAI (an toan hon la di thang)
+                cmd.linear.x = 0.0
                 cmd.angular.z = 0.0
                 if self.use_camera:
                     # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
                     current_time = self.get_clock().now().seconds_nanoseconds()[0]
                     if current_time - self.last_lane_log_time >= 2.0:
-                        self.get_logger().info('📷 Khong phat hien lan duong - Di thang')
+                        self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
                         self.last_lane_log_time = current_time
         
         self.cmd_vel_pub.publish(cmd)
