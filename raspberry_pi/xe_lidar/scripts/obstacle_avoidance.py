@@ -27,6 +27,7 @@ class AutonomousDrive(Node):
         self.declare_parameter('max_angular_speed', 1.0)  # Tốc độ quay tối đa (rad/s)
         self.declare_parameter('front_angle_range', 60)  # Góc phía trước để kiểm tra (degrees)
         self.declare_parameter('use_camera', True)  # Sử dụng camera hay không
+        self.declare_parameter('use_lidar', True)   # Sử dụng LiDAR để tránh vật cản hay không
         self.declare_parameter('camera_topic', '/camera/image_raw')  # Topic camera
         self.declare_parameter('max_steer_angle', 0.5236)  # Góc lái tối đa (rad) ~30 degrees
         self.declare_parameter('debug_camera', False)  # Hiển thị debug camera output
@@ -48,6 +49,7 @@ class AutonomousDrive(Node):
         self.max_angular_speed = self.get_parameter('max_angular_speed').value
         self.front_angle_range = self.get_parameter('front_angle_range').value
         self.use_camera = self.get_parameter('use_camera').value
+        self.use_lidar = self.get_parameter('use_lidar').value
         self.max_steer_angle = self.get_parameter('max_steer_angle').value
         self.debug_camera = self.get_parameter('debug_camera').value
         self.kp = float(self.get_parameter('kp').value)
@@ -63,13 +65,17 @@ class AutonomousDrive(Node):
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
         
         # Subscribers
-        self.scan_sub = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            10
-        )
-        self.get_logger().info('Da subscribe topic /scan cho LiDAR')
+        if self.use_lidar:
+            self.scan_sub = self.create_subscription(
+                LaserScan,
+                '/scan',
+                self.scan_callback,
+                10
+            )
+            self.get_logger().info('Da subscribe topic /scan cho LiDAR')
+        else:
+            self.scan_sub = None
+            self.get_logger().info('Bo qua LiDAR (use_lidar=false) - chi su dung camera de bam lan')
         
         if self.use_camera:
             camera_topic = self.get_parameter('camera_topic').value
@@ -156,7 +162,7 @@ class AutonomousDrive(Node):
     
     def process_lidar_data(self, scan):
         """Xử lý dữ liệu LiDAR để phát hiện vật cản"""
-        if scan is None:
+        if not self.use_lidar or scan is None:
             return
         
         ranges = np.array(scan.ranges)
@@ -443,25 +449,26 @@ class AutonomousDrive(Node):
         dt = max(0.01, now - getattr(self, "last_control_time", now))
         self.last_control_time = now
         
-        # Xu ly truong hop chua co LiDAR (chay cham de an toan)
-        if self.latest_scan is None:
-            if self.lidar_warning_count % 20 == 0:
-                self.get_logger().warn('Chua nhan duoc du lieu LiDAR, chay cham de an toan...')
-            self.lidar_warning_count += 1
-            
-            # Chay cham khi chua co LiDAR (toc do 50% de an toan)
-            cmd.linear.x = self.max_linear_speed * 0.5
-            cmd.angular.z = 0.0
-            self.cmd_vel_pub.publish(cmd)
-            return
-        
-        # Reset counter khi da co du lieu
-        if self.lidar_warning_count > 0:
-            self.lidar_warning_count = 0
-            self.get_logger().info('Da nhan duoc du lieu LiDAR, chuyen sang che do tu dong!')
+        # Nếu đang dùng LiDAR, xử lý trường hợp chưa có dữ liệu LiDAR (chạy chậm để an toàn)
+        if self.use_lidar:
+            if self.latest_scan is None:
+                if self.lidar_warning_count % 20 == 0:
+                    self.get_logger().warn('Chua nhan duoc du lieu LiDAR, chay cham de an toan...')
+                self.lidar_warning_count += 1
+
+                # Chay cham khi chua co LiDAR (toc do 50% de an toan)
+                cmd.linear.x = self.max_linear_speed * 0.5
+                cmd.angular.z = 0.0
+                self.cmd_vel_pub.publish(cmd)
+                return
+
+            # Reset counter khi da co du lieu
+            if self.lidar_warning_count > 0:
+                self.lidar_warning_count = 0
+                self.get_logger().info('Da nhan duoc du lieu LiDAR, chuyen sang che do tu dong!')
         
         # UU TIEN PHU: Kiem tra vat can bang LiDAR (chi khi co vat can moi can thiep)
-        if self.obstacle_detected:
+        if self.use_lidar and self.obstacle_detected:
             # Co vat can, thuc hien tranh (tam thoi bo qua camera)
             if self.obstacle_direction == 0:
                 # Vat can o giua hoac ca hai ben, lui lai va quay
@@ -479,7 +486,7 @@ class AutonomousDrive(Node):
                 cmd.angular.z = self.max_angular_speed * 0.7
                 self.get_logger().info('⚠️ Vat can ben phai - Quay trai de tranh')
         else:
-            # KHÔNG có vật cản - ƯU TIÊN 2: Camera để đi đúng làn đường
+            # KHÔNG có vật cản (hoặc đã tắt LiDAR) - ƯU TIÊN: Camera để đi đúng làn đường
             if self.use_camera and self.lane_detected:
                 # Điều chỉnh để đi giữa đường dựa trên camera (lane following)
                 cmd.linear.x = self.max_linear_speed

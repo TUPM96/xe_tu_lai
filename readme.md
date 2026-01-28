@@ -363,12 +363,16 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     max_linear_speed:=0.3 \
     motor_min_pwm:=100 \
+    min_distance:=0.5 \
+    safe_distance:=0.8 \
     lane_threshold_c:=25 \
     lane_offset_smoothing:=0.7 \
     lane_dead_zone:=0.05 \
     kp:=0.5 \
     ki:=0.0 \
     kd:=0.0 \
+    use_lidar:=true \
+    use_camera:=true \
     lidar_serial_port:=/dev/ttyUSB0 \
     arduino_serial_port:=/dev/ttyACM0 \
     video_device:=/dev/video0 \
@@ -382,6 +386,8 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
 |---------|----------|-------|
 | `max_linear_speed` | 0.3 | Tốc độ tối đa (m/s) |
 | `motor_min_pwm` | 100 | PWM tối thiểu motor (0-255) |
+| `min_distance` | 0.5 | Khoảng cách tối thiểu để dừng (m) |
+| `safe_distance` | 0.8 | Khoảng cách an toàn để tránh (m) |
 | `lane_threshold_c` | 25 | Ngưỡng lane detection (cao = chỉ nhận đen) |
 | `lane_offset_smoothing` | 0.7 | Hệ số làm mượt (0.0-0.95) |
 | `lane_dead_zone` | 0.05 | Vùng chết offset |
@@ -390,6 +396,8 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
 | `kd` | 0.0 | Hệ số D (PID) |
 | `front_angle_range` | 60 | Góc LiDAR phía trước để kiểm tra vật cản (độ) |
 | `cornering_speed_factor` | 0.6 | Hệ số giảm tốc khi vào cua (0.0–1.0) |
+| `use_lidar` | true | Bật/tắt LiDAR trong node tự lái (true/false) |
+| `use_camera` | true | Bật/tắt camera lane following trong node tự lái (true/false) |
 | `lidar_serial_port` | /dev/ttyUSB0 | Port LiDAR |
 | `arduino_serial_port` | /dev/ttyACM0 | Port Arduino |
 | `video_device` | /dev/video0 | Device camera |
@@ -642,6 +650,8 @@ Tất cả tham số có thể cấu hình khi chạy launch file:
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     max_linear_speed:=0.3 \
     motor_min_pwm:=100 \
+    min_distance:=0.5 \
+    safe_distance:=0.8 \
     lane_threshold_c:=25 \
     lane_offset_smoothing:=0.7 \
     lane_dead_zone:=0.05 \
@@ -659,6 +669,8 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
 |---------|----------|-------|
 | `max_linear_speed` | 0.3 | Tốc độ tối đa (m/s) |
 | `motor_min_pwm` | 100 | PWM tối thiểu cho motor (0-255) |
+| `min_distance` | 0.5 | Khoảng cách tối thiểu để dừng (m) |
+| `safe_distance` | 0.8 | Khoảng cách an toàn để tránh (m) |
 | `lane_threshold_c` | 25 | Ngưỡng C cho lane detection |
 | `lane_offset_smoothing` | 0.7 | Hệ số làm mượt (0.0-0.95) |
 | `lane_dead_zone` | 0.05 | Vùng chết offset |

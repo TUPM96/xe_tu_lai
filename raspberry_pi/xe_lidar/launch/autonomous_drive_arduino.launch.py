@@ -130,6 +130,19 @@ def generate_launch_description():
         description='PWM tối thiểu cho motor (0-255)'
     )
 
+    # Tham số khoảng cách an toàn LiDAR
+    min_distance_arg = DeclareLaunchArgument(
+        'min_distance',
+        default_value='0.5',
+        description='Khoang cach toi thieu de dung (m)'
+    )
+
+    safe_distance_arg = DeclareLaunchArgument(
+        'safe_distance',
+        default_value='0.8',
+        description='Khoang cach an toan de tranh vat can (m)'
+    )
+
     lane_threshold_c_arg = DeclareLaunchArgument(
         'lane_threshold_c',
         default_value='25',
@@ -147,6 +160,19 @@ def generate_launch_description():
         'lane_dead_zone',
         default_value='0.05',
         description='Vung chet - bo qua offset nho hon gia tri nay'
+    )
+
+    # Bật/tắt từng cảm biến trong node tự lái
+    use_lidar_arg = DeclareLaunchArgument(
+        'use_lidar',
+        default_value='true',
+        description='Su dung LiDAR de tranh vat can (true/false)'
+    )
+
+    use_camera_arg = DeclareLaunchArgument(
+        'use_camera',
+        default_value='true',
+        description='Su dung camera de bam lan (true/false)'
     )
 
     # Tham số góc LiDAR phía trước để tránh vật cản
@@ -207,12 +233,13 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'use_sim_time': False,
-            'min_distance': 0.5,
-            'safe_distance': 0.8,
+            'min_distance': LaunchConfiguration('min_distance'),
+            'safe_distance': LaunchConfiguration('safe_distance'),
             'max_linear_speed': LaunchConfiguration('max_linear_speed'),
             'max_angular_speed': 1.0,
             'front_angle_range': LaunchConfiguration('front_angle_range'),
-            'use_camera': True,
+            'use_lidar': LaunchConfiguration('use_lidar'),
+            'use_camera': LaunchConfiguration('use_camera'),
             'camera_topic': '/camera/image_raw',
             # Tham số PID cho bám làn
             'kp': LaunchConfiguration('kp'),
@@ -250,9 +277,13 @@ def generate_launch_description():
         arduino_serial_port_arg,
         max_linear_speed_arg,
         motor_min_pwm_arg,
+        min_distance_arg,
+        safe_distance_arg,
         lane_threshold_c_arg,
         lane_offset_smoothing_arg,
         lane_dead_zone_arg,
+        use_lidar_arg,
+        use_camera_arg,
         front_angle_range_arg,
         kp_arg,
         ki_arg,
