@@ -357,24 +357,21 @@ cd ~/ros2_ws
 source install/setup.bash
 
 # Chạy với giá trị mặc định
-python3 src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py
 
 # Chạy với ĐẦY ĐỦ tham số
-python3 src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py \
-    --speed 0.3 \
-    --pwm 100 \
-    --threshold 25 \
-    --smooth 0.7 \
-    --deadzone 0.05 \
-    --kp 0.5 \
-    --ki 0.0 \
-    --kd 0.0 \
-    --lidar /dev/ttyUSB0 \
-    --arduino /dev/ttyACM0 \
-    --camera /dev/video0
-
-# Xem tất cả tham số
-python3 src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py --help
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
+    max_linear_speed:=0.3 \
+    motor_min_pwm:=100 \
+    lane_threshold_c:=25 \
+    lane_offset_smoothing:=0.7 \
+    lane_dead_zone:=0.05 \
+    kp:=0.5 \
+    ki:=0.0 \
+    kd:=0.0 \
+    lidar_serial_port:=/dev/ttyUSB0 \
+    arduino_serial_port:=/dev/ttyACM0 \
+    video_device:=/dev/video0
 ```
 
 **Tham số có thể cấu hình:**
@@ -611,9 +608,9 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_offset_smoothing:=0
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_dead_zone:=0.1
 ```
 
-### Tham số Arduino Bridge
+### Tham số Launch File (Đầy đủ)
 
-Điều chỉnh tốc độ và PWM motor qua Arduino Bridge:
+Tất cả tham số có thể cấu hình khi chạy launch file:
 
 ```bash
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
@@ -621,13 +618,28 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     motor_min_pwm:=100 \
     lane_threshold_c:=25 \
     lane_offset_smoothing:=0.7 \
-    lane_dead_zone:=0.05
+    lane_dead_zone:=0.05 \
+    kp:=0.5 \
+    ki:=0.0 \
+    kd:=0.0 \
+    lidar_serial_port:=/dev/ttyUSB0 \
+    arduino_serial_port:=/dev/ttyACM0 \
+    video_device:=/dev/video0
 ```
 
 | Tham số | Mặc định | Mô tả |
 |---------|----------|-------|
-| `max_linear_speed` | 0.3 | Tốc độ tối đa gửi tới Arduino (m/s) |
+| `max_linear_speed` | 0.3 | Tốc độ tối đa (m/s) |
 | `motor_min_pwm` | 100 | PWM tối thiểu cho motor (0-255) |
+| `lane_threshold_c` | 25 | Ngưỡng C cho lane detection |
+| `lane_offset_smoothing` | 0.7 | Hệ số làm mượt (0.0-0.95) |
+| `lane_dead_zone` | 0.05 | Vùng chết offset |
+| `kp` | 0.5 | Hệ số P (PID) |
+| `ki` | 0.0 | Hệ số I (PID) |
+| `kd` | 0.0 | Hệ số D (PID) |
+| `lidar_serial_port` | /dev/ttyUSB0 | Port LiDAR |
+| `arduino_serial_port` | /dev/ttyACM0 | Port Arduino |
+| `video_device` | /dev/video0 | Device camera |
 
 **Giao thức Serial Arduino:**
 - `V:linear:angular` - Điều khiển (linear m/s, angular rad/s)
