@@ -101,12 +101,9 @@ class AutonomousDrive(Node):
         # State machine cho tránh vật cản
         self.obstacle_avoidance_state = ObstacleAvoidanceState.NORMAL
         self.obstacle_clear_count = 0  # Đếm số lần không phát hiện vật cản
-        self.obstacle_clear_threshold = 10  # Sau 10 lần không có vật cản thì quay về
-        
-        # State machine cho tránh vật cản
-        self.obstacle_avoidance_state = ObstacleAvoidanceState.NORMAL
-        self.obstacle_clear_count = 0  # Đếm số lần không phát hiện vật cản
-        self.obstacle_clear_threshold = 10  # Sau 10 lần không có vật cản thì quay về
+        self.obstacle_clear_threshold = 30  # Sau 30 lần (3 giây) không có vật cản thì quay về
+        self.avoidance_distance = 0.0  # Quãng đường đã đi khi tránh vật cản
+        self.avoidance_distance_threshold = 1.5  # Phải đi ít nhất 1.5m trước khi quay về
         
         # Subscribers
         if self.use_lidar:
