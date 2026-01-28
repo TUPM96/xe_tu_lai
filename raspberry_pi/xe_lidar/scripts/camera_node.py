@@ -22,14 +22,21 @@ class CameraNode(Node):
         self.declare_parameter('height', 480)
         self.declare_parameter('fps', 30)
         self.declare_parameter('frame_id', 'camera_link_optical')
+        # Hiệu chỉnh trung tâm: nếu "giữa hình" bị lệch trái thì center_offset_x > 0 (dịch nội dung sang phải)
+        self.declare_parameter('center_offset_x', 0)   # pixels, dương = dịch sang phải
+        self.declare_parameter('center_offset_y', 0)   # pixels, dương = dịch xuống dưới
 
         video_device = self.get_parameter('video_device').value
         width = int(self.get_parameter('width').value)
         height = int(self.get_parameter('height').value)
         fps = int(self.get_parameter('fps').value)
         self.frame_id = self.get_parameter('frame_id').value
+        self.center_offset_x = int(self.get_parameter('center_offset_x').value)
+        self.center_offset_y = int(self.get_parameter('center_offset_y').value)
 
         self.get_logger().info(f'Dang mo camera {video_device} voi width={width}, height={height}, fps={fps}')
+        if self.center_offset_x != 0 or self.center_offset_y != 0:
+            self.get_logger().info(f'Hieu chinh trung tam: offset_x={self.center_offset_x}, offset_y={self.center_offset_y}')
 
         # Mở camera với V4L2 backend
         self.cap = cv2.VideoCapture(video_device, cv2.CAP_V4L2)
@@ -138,10 +145,30 @@ class CameraNode(Node):
             if frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
                 return  # Bỏ qua frame corrupt
             
-            # Kiểm tra kích thước frame đúng không
-            if frame.shape[0] != self.height or frame.shape[1] != self.width:
-                return  # Bỏ qua frame sai kích thước
-            
+            h, w = frame.shape[:2]
+            # Luôn lấy vùng trung tâm đúng kích thước (640x480) - tránh lệch khi camera trả khác tỉ lệ
+            if w != self.width or h != self.height:
+                x0 = max(0, (w - self.width) // 2)
+                y0 = max(0, (h - self.height) // 2)
+                x1 = min(w, x0 + self.width)
+                y1 = min(h, y0 + self.height)
+                frame = frame[y0:y1, x0:x1].copy()
+                # Nếu sau crop vẫn thiếu (camera nhỏ hơn 640x480) thì pad
+                if frame.shape[0] != self.height or frame.shape[1] != self.width:
+                    return
+
+            # Hiệu chỉnh trung tâm: "giữa hình" lệch trái -> center_offset_x > 0 (dịch nội dung sang phải)
+            if self.center_offset_x != 0 or self.center_offset_y != 0:
+                h, w = self.height, self.width
+                ox = max(0, min(self.center_offset_x, w - 1))
+                oy = max(0, min(self.center_offset_y, h - 1))
+                if ox > 0 or oy > 0:
+                    out = np.zeros((h, w, 3), dtype=frame.dtype)
+                    src_h, src_w = h - oy, w - ox
+                    if src_h > 0 and src_w > 0:
+                        out[oy:oy + src_h, ox:ox + src_w] = frame[0:src_h, 0:src_w]
+                    frame = out
+
             try:
                 # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
                 ros_image = self.cv2_to_imgmsg(frame, "bgr8")
