@@ -36,6 +36,9 @@ class AutonomousDrive(Node):
         self.declare_parameter('kd', 0.0)
         # Tham số lane detection - C càng cao thì chỉ nhận màu đen hơn (loại bỏ xám)
         self.declare_parameter('lane_threshold_c', 25)  # Giá trị C trong adaptive threshold
+        # Tham số làm mượt (smoothing) để tránh phản ứng quá nhanh
+        self.declare_parameter('lane_offset_smoothing', 0.7)  # 0.0=không smooth, 0.9=rất smooth
+        self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
 
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -49,9 +52,12 @@ class AutonomousDrive(Node):
         self.ki = float(self.get_parameter('ki').value)
         self.kd = float(self.get_parameter('kd').value)
         self.lane_threshold_c = int(self.get_parameter('lane_threshold_c').value)
+        self.lane_offset_smoothing = float(self.get_parameter('lane_offset_smoothing').value)
+        self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
         self.lane_error_integral = 0.0
         self.lane_error_prev = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
+        self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
         
         # Subscribers
         self.scan_sub = self.create_subscription(
@@ -356,42 +362,51 @@ class AutonomousDrive(Node):
                 center_y_top = roi_top
                 cv2.line(image_with_lanes, (int(center_x), center_y_bottom),
                         (int(center_x), center_y_top), (0, 255, 0), 2)
-            
+
+            # Ap dung bo loc lam muot (exponential moving average)
+            # smoothed = alpha * previous + (1 - alpha) * new
+            alpha = self.lane_offset_smoothing
+            self.smoothed_lane_offset = alpha * self.smoothed_lane_offset + (1 - alpha) * self.lane_center_offset
+
+            # Ap dung dead zone - neu offset qua nho thi coi nhu 0
+            if abs(self.smoothed_lane_offset) < self.lane_dead_zone:
+                self.smoothed_lane_offset = 0.0
+
             # Ve text thong tin
             status_text = "Phat hien lan duong" if self.lane_detected else "Khong phat hien lan"
-            offset_text = f"Offset: {self.lane_center_offset:.2f}"
-            cv2.putText(image_with_lanes, status_text, (10, 30), 
+            offset_text = f"Raw: {self.lane_center_offset:.2f} | Smooth: {self.smoothed_lane_offset:.2f}"
+            cv2.putText(image_with_lanes, status_text, (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(image_with_lanes, offset_text, (10, 60), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(image_with_lanes, offset_text, (10, 60),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
-            # Ve huong can di
+            # Ve huong can di - dung smoothed offset de hien thi chinh xac hon
             if self.lane_detected:
                 # Tinh vi tri de ve mui ten chi huong
                 arrow_x = int(center_x)
                 arrow_y = int(height * 0.75)  # Vi tri o 75% chieu cao
-                
-                # Tinh do lech de ve mui ten (scale offset)
-                offset_pixels = int(self.lane_center_offset * width * 0.4)  # Scale offset
+
+                # Tinh do lech de ve mui ten (scale offset) - dung smoothed
+                offset_pixels = int(self.smoothed_lane_offset * width * 0.4)  # Scale offset
                 arrow_end_x = arrow_x + offset_pixels
                 arrow_end_y = arrow_y - 60  # Mui ten huong len tren
-                
+
                 # Ve mui ten chi huong (mau vang, day)
                 if abs(offset_pixels) > 5:  # Chi ve mui ten neu co offset
-                    cv2.arrowedLine(image_with_lanes, 
+                    cv2.arrowedLine(image_with_lanes,
                                    (arrow_x, arrow_y),
                                    (arrow_end_x, arrow_end_y),
                                    (0, 255, 255), 5, tipLength=0.3)
-                
-                # Text huong di
-                if abs(self.lane_center_offset) < 0.1:
+
+                # Text huong di - dung smoothed offset
+                if abs(self.smoothed_lane_offset) < self.lane_dead_zone:
                     direction_text = "Di thang"
                     direction_color = (0, 255, 0)  # Xanh la
-                elif self.lane_center_offset > 0:
-                    direction_text = f"Re trai ({abs(self.lane_center_offset):.2f})"
+                elif self.smoothed_lane_offset > 0:
+                    direction_text = f"Re trai ({abs(self.smoothed_lane_offset):.2f})"
                     direction_color = (255, 165, 0)  # Mau cam
                 else:
-                    direction_text = f"Re phai ({abs(self.lane_center_offset):.2f})"
+                    direction_text = f"Re phai ({abs(self.smoothed_lane_offset):.2f})"
                     direction_color = (255, 165, 0)  # Mau cam
                 
                 cv2.putText(image_with_lanes, direction_text, (10, 90), 
@@ -472,8 +487,8 @@ class AutonomousDrive(Node):
                 # - lane_center_offset < 0: xe lệch TRÁI → cần quay PHẢI (angular.z < 0)
                 # - ROS2 convention: angular.z dương = quay trái, angular.z âm = quay phải
 
-                # Bộ điều khiển PID cho bám làn
-                error = float(self.lane_center_offset)
+                # Bộ điều khiển PID cho bám làn - dùng smoothed offset để tránh giật
+                error = float(self.smoothed_lane_offset)
                 # Cộng dồn sai lệch (thành phần I), có giới hạn để tránh bão hòa
                 self.lane_error_integral += error * dt
                 # Giới hạn tích phân để tránh quá lớn
@@ -505,7 +520,8 @@ class AutonomousDrive(Node):
                 current_time = self.get_clock().now().seconds_nanoseconds()[0]
                 if current_time - self.last_lane_log_time >= 2.0:
                     self.get_logger().info(
-                        f'📷 Phat hien lan duong - Offset: {self.lane_center_offset:.2f}, '
+                        f'📷 Lane - Raw: {self.lane_center_offset:.2f}, '
+                        f'Smooth: {self.smoothed_lane_offset:.2f}, '
                         f'Angular: {cmd.angular.z:.2f} rad/s'
                     )
                     self.last_lane_log_time = current_time

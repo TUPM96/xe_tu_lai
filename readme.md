@@ -492,7 +492,9 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args \
     -p kp:=0.7 \
     -p ki:=0.01 \
     -p kd:=0.1 \
-    -p lane_threshold_c:=25
+    -p lane_threshold_c:=25 \
+    -p lane_offset_smoothing:=0.7 \
+    -p lane_dead_zone:=0.05
 ```
 
 | Tham số | Mặc định | Mô tả |
@@ -507,6 +509,8 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args \
 | `front_angle_range` | 60 | Góc phát hiện phía trước (degrees) |
 | `use_camera` | true | Bật/tắt camera lane following |
 | `lane_threshold_c` | 25 | Ngưỡng C cho lane detection (cao hơn = chỉ nhận màu đen hơn) |
+| `lane_offset_smoothing` | 0.7 | Hệ số làm mượt offset (0.0=không smooth, 0.9=rất smooth) |
+| `lane_dead_zone` | 0.05 | Vùng chết - bỏ qua offset nhỏ hơn giá trị này |
 
 ### Tham số Lane Detection (lane_threshold_c)
 
@@ -527,6 +531,33 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=35
 ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=20
 ```
 
+### Tham số Làm Mượt Góc Lái (Smoothing)
+
+Khi xe bám làn, camera liên tục cập nhật offset và gửi góc lái mới. Nếu phản hồi quá nhanh, servo chưa kịp quay đến góc mong muốn thì đã nhận lệnh mới, gây ra hiện tượng "giật". Các tham số smoothing giúp làm mượt quá trình này:
+
+| Tham số | Mặc định | Mô tả |
+|---------|----------|-------|
+| `lane_offset_smoothing` | 0.7 | Hệ số làm mượt (0.0-0.95) |
+| `lane_dead_zone` | 0.05 | Vùng chết - bỏ qua offset nhỏ |
+
+**Cách hoạt động:**
+- `lane_offset_smoothing`: Sử dụng bộ lọc EMA (Exponential Moving Average)
+  - `smoothed = alpha * previous + (1-alpha) * new`
+  - Giá trị cao hơn = mượt hơn nhưng phản hồi chậm hơn
+- `lane_dead_zone`: Nếu offset < dead_zone, coi như đang đi thẳng (tránh dao động nhỏ)
+
+**Ví dụ:**
+```bash
+# Xe giật nhiều -> tăng smoothing
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_offset_smoothing:=0.85
+
+# Xe phản hồi chậm quá -> giảm smoothing
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_offset_smoothing:=0.5
+
+# Xe dao động nhỏ khi đi thẳng -> tăng dead zone
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_dead_zone:=0.1
+```
+
 ### Tham số Arduino Bridge
 
 Điều chỉnh tốc độ và PWM motor qua Arduino Bridge:
@@ -535,7 +566,9 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=20
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     max_linear_speed:=0.3 \
     motor_min_pwm:=100 \
-    lane_threshold_c:=25
+    lane_threshold_c:=25 \
+    lane_offset_smoothing:=0.7 \
+    lane_dead_zone:=0.05
 ```
 
 | Tham số | Mặc định | Mô tả |

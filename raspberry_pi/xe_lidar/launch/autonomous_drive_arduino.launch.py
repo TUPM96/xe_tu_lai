@@ -136,6 +136,19 @@ def generate_launch_description():
         description='Nguong C cho lane detection (cao hon = chi nhan mau den hon)'
     )
 
+    # Tham số làm mượt steering để tránh giật
+    lane_offset_smoothing_arg = DeclareLaunchArgument(
+        'lane_offset_smoothing',
+        default_value='0.7',
+        description='He so lam muot offset (0.0=khong smooth, 0.9=rat smooth)'
+    )
+
+    lane_dead_zone_arg = DeclareLaunchArgument(
+        'lane_dead_zone',
+        default_value='0.05',
+        description='Vung chet - bo qua offset nho hon gia tri nay'
+    )
+
     arduino_bridge_node = Node(
         package=package_name,
         executable='arduino_bridge.py',
@@ -173,6 +186,9 @@ def generate_launch_description():
             'ki': 0.0,
             'kd': 0.0,
             'lane_threshold_c': LaunchConfiguration('lane_threshold_c'),
+            # Tham số làm mượt để tránh giật góc lái
+            'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
+            'lane_dead_zone': LaunchConfiguration('lane_dead_zone'),
         }]
     )
     
@@ -201,6 +217,8 @@ def generate_launch_description():
         max_linear_speed_arg,
         motor_min_pwm_arg,
         lane_threshold_c_arg,
+        lane_offset_smoothing_arg,
+        lane_dead_zone_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,
