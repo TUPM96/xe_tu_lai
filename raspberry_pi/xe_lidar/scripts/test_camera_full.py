@@ -171,6 +171,10 @@ def test_camera_full(device=0, width=1280, height=720, enable_lane_detection=Tru
         print(f"❌ Không thể mở camera /dev/video{device}")
         return False
     
+    # Dùng MJPG codec để hỗ trợ HD resolution
+    fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+    cap.set(cv2.CAP_PROP_FOURCC, fourcc)
+    
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     

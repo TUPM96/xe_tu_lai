@@ -38,6 +38,10 @@ class CameraNode(Node):
             self.get_logger().error(f'Khong the mo camera tai {video_device}')
             sys.exit(1)
 
+        # Dùng MJPG codec để hỗ trợ HD resolution (YUYV chỉ hỗ trợ 640x480)
+        fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
+
         # Set resolution và fps
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)

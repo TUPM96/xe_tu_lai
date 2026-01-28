@@ -35,6 +35,10 @@ def test_camera(device=0, width=1280, height=720):
         print(f"   - Device ID đúng chưa? (ls /dev/video*)")
         return False
     
+    # Dùng MJPG codec để hỗ trợ HD resolution
+    fourcc = cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')
+    cap.set(cv2.CAP_PROP_FOURCC, fourcc)
+    
     # Đặt kích thước
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
