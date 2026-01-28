@@ -411,6 +411,32 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py max_linear_speed:=0.5 mo
 
 # Điều chỉnh PID
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py kp:=0.7 ki:=0.01 kd:=0.1
+
+# Chạy với LiDAR tránh vật cản, không dùng camera (đi thẳng và tránh vật cản)
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
+  max_linear_speed:=0.15 \
+  motor_min_pwm:=70 \
+  min_distance:=0.4 \
+  safe_distance:=0.4 \
+  lane_threshold_c:=15 \
+  lane_offset_smoothing:=0.7 \
+  lane_dead_zone:=0.05 \
+  kp:=0.7 \
+  ki:=0.0 \
+  kd:=0.1 \
+  use_lidar:=true \
+  use_camera:=false \
+  lidar_serial_port:=/dev/ttyUSB0 \
+  arduino_serial_port:=/dev/ttyACM0 \
+  video_device:=/dev/video0 \
+  front_angle_range:=60 \
+  cornering_speed_factor:=0.4 \
+  straight_speed_factor:=0.8 \
+  turning_speed_factor:=0.3 \
+  servo_center_angle:=100.0 \
+  servo_min_angle:=55.0 \
+  servo_max_angle:=145.0 \
+  servo_angle_smoothing:=0.8
 ```
 
 ### Cách 2: Chạy từng script riêng lẻ (Khuyến nghị để debug)

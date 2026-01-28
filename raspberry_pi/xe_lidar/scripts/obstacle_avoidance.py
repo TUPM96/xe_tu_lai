@@ -721,69 +721,85 @@ class AutonomousDrive(Node):
                         cmd.linear.x = -self.max_linear_speed * 0.5
                         self.get_logger().info('⚠️ Vat can phia truoc - Lui lai va re phai 155°')
                     
-                    self.smoothed_servo_angle_deg = avoid_servo_angle
-                    self.last_servo_angle_deg = avoid_servo_angle
-                    self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                    # Làm mượt góc rẽ khi bắt đầu tránh để tránh quẹo quá nhanh
+                    alpha = 0.6  # Hệ số làm mượt khi bắt đầu tránh
+                    self.smoothed_servo_angle_deg = alpha * self.smoothed_servo_angle_deg + (1 - alpha) * avoid_servo_angle
+                    self.last_servo_angle_deg = self.smoothed_servo_angle_deg
+                    self.servo_angle_pub.publish(Float32(data=self.smoothed_servo_angle_deg))
                     if cmd.linear.x == 0.0:
                         cmd.linear.x = self.max_linear_speed * 0.6
                     cmd.angular.z = 0.0
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_LEFT:
                     # Dang tranh bang cach re trai - kiem tra va dieu chinh lien tuc
-                    # Kiểm tra vật cản ở phía đang rẽ (bên trái) để đảm bảo không đâm vào vật cản khác
-                    if self.left_obstacle_distance < 0.3:
-                        # Có vật cản ở phía đang rẽ - dừng lại hoặc đổi hướng
+                    # Chỉ dừng khi thực sự nguy hiểm (< 15cm), còn lại vẫn chạy và quẹo
+                    if self.closest_obstacle_distance < 0.15:
+                        # Thực sự nguy hiểm - dừng lại
                         cmd.linear.x = 0.0
-                        self.get_logger().warn(f'⚠️ Vat can ben trai khi dang re trai ({self.left_obstacle_distance*100:.0f}cm) - DUNG LAI!')
-                    elif self.closest_obstacle_distance < 0.25:
-                        # Vật cản quá gần phía trước - dừng lại
+                        if int(current_time * 10) % 10 == 0:  # Log mỗi giây
+                            self.get_logger().warn(f'⚠️ Vat can qua gan ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                    elif self.left_obstacle_distance < 0.15:
+                        # Vật cản quá gần ở phía đang rẽ - dừng lại
                         cmd.linear.x = 0.0
-                        self.get_logger().warn(f'⚠️ Vat can qua gan phia truoc ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                        if int(current_time * 10) % 10 == 0:
+                            self.get_logger().warn(f'⚠️ Vat can ben trai qua gan ({self.left_obstacle_distance*100:.0f}cm) - DUNG LAI!')
                     else:
+                        # Trong mức an toàn - tiếp tục chạy và quẹo
                         # Điều chỉnh góc rẽ dựa trên khoảng cách vật cản
-                        # Vật cản càng gần thì rẽ càng mạnh
-                        if self.closest_obstacle_distance < 0.4:
-                            avoid_servo_angle = 35.0  # Rẽ rất mạnh (35°)
-                            cmd.linear.x = self.max_linear_speed * 0.3  # Giảm tốc độ nhiều
+                        if self.closest_obstacle_distance < 0.3:
+                            target_servo_angle = 35.0  # Rẽ rất mạnh
+                            cmd.linear.x = self.max_linear_speed * 0.4  # Giảm tốc độ
+                        elif self.closest_obstacle_distance < 0.4:
+                            target_servo_angle = 40.0  # Rẽ mạnh
+                            cmd.linear.x = self.max_linear_speed * 0.5
                         elif self.closest_obstacle_distance < 0.5:
-                            avoid_servo_angle = 40.0  # Rẽ mạnh (40°)
-                            cmd.linear.x = self.max_linear_speed * 0.4
+                            target_servo_angle = 42.0  # Rẽ vừa
+                            cmd.linear.x = self.max_linear_speed * 0.6
                         else:
-                            avoid_servo_angle = 45.0  # Rẽ bình thường
+                            target_servo_angle = 45.0  # Rẽ bình thường
                             cmd.linear.x = self.max_linear_speed * 0.6
                         
-                        self.smoothed_servo_angle_deg = avoid_servo_angle
-                        self.last_servo_angle_deg = avoid_servo_angle
-                        self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                        # Làm mượt góc rẽ để tránh quẹo quá nhanh
+                        alpha = 0.7  # Hệ số làm mượt cho góc rẽ tránh vật cản
+                        self.smoothed_servo_angle_deg = alpha * self.smoothed_servo_angle_deg + (1 - alpha) * target_servo_angle
+                        self.last_servo_angle_deg = self.smoothed_servo_angle_deg
+                        self.servo_angle_pub.publish(Float32(data=self.smoothed_servo_angle_deg))
                         # Tích lũy quãng đường đã đi
                         self.avoidance_distance += cmd.linear.x * dt
                     cmd.angular.z = 0.0
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_RIGHT:
                     # Dang tranh bang cach re phai - kiem tra va dieu chinh lien tuc
-                    # Kiểm tra vật cản ở phía đang rẽ (bên phải) để đảm bảo không đâm vào vật cản khác
-                    if self.right_obstacle_distance < 0.3:
-                        # Có vật cản ở phía đang rẽ - dừng lại hoặc đổi hướng
+                    # Chỉ dừng khi thực sự nguy hiểm (< 15cm), còn lại vẫn chạy và quẹo
+                    if self.closest_obstacle_distance < 0.15:
+                        # Thực sự nguy hiểm - dừng lại
                         cmd.linear.x = 0.0
-                        self.get_logger().warn(f'⚠️ Vat can ben phai khi dang re phai ({self.right_obstacle_distance*100:.0f}cm) - DUNG LAI!')
-                    elif self.closest_obstacle_distance < 0.25:
-                        # Vật cản quá gần phía trước - dừng lại
+                        if int(current_time * 10) % 10 == 0:  # Log mỗi giây
+                            self.get_logger().warn(f'⚠️ Vat can qua gan ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                    elif self.right_obstacle_distance < 0.15:
+                        # Vật cản quá gần ở phía đang rẽ - dừng lại
                         cmd.linear.x = 0.0
-                        self.get_logger().warn(f'⚠️ Vat can qua gan phia truoc ({self.closest_obstacle_distance*100:.0f}cm) - DUNG LAI!')
+                        if int(current_time * 10) % 10 == 0:
+                            self.get_logger().warn(f'⚠️ Vat can ben phai qua gan ({self.right_obstacle_distance*100:.0f}cm) - DUNG LAI!')
                     else:
+                        # Trong mức an toàn - tiếp tục chạy và quẹo
                         # Điều chỉnh góc rẽ dựa trên khoảng cách vật cản
-                        # Vật cản càng gần thì rẽ càng mạnh
-                        if self.closest_obstacle_distance < 0.4:
-                            avoid_servo_angle = 165.0  # Rẽ rất mạnh (165°)
-                            cmd.linear.x = self.max_linear_speed * 0.3  # Giảm tốc độ nhiều
+                        if self.closest_obstacle_distance < 0.3:
+                            target_servo_angle = 165.0  # Rẽ rất mạnh
+                            cmd.linear.x = self.max_linear_speed * 0.4  # Giảm tốc độ
+                        elif self.closest_obstacle_distance < 0.4:
+                            target_servo_angle = 160.0  # Rẽ mạnh
+                            cmd.linear.x = self.max_linear_speed * 0.5
                         elif self.closest_obstacle_distance < 0.5:
-                            avoid_servo_angle = 160.0  # Rẽ mạnh (160°)
-                            cmd.linear.x = self.max_linear_speed * 0.4
+                            target_servo_angle = 158.0  # Rẽ vừa
+                            cmd.linear.x = self.max_linear_speed * 0.6
                         else:
-                            avoid_servo_angle = 155.0  # Rẽ bình thường
+                            target_servo_angle = 155.0  # Rẽ bình thường
                             cmd.linear.x = self.max_linear_speed * 0.6
                         
-                        self.smoothed_servo_angle_deg = avoid_servo_angle
-                        self.last_servo_angle_deg = avoid_servo_angle
-                        self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                        # Làm mượt góc rẽ để tránh quẹo quá nhanh
+                        alpha = 0.7  # Hệ số làm mượt cho góc rẽ tránh vật cản
+                        self.smoothed_servo_angle_deg = alpha * self.smoothed_servo_angle_deg + (1 - alpha) * target_servo_angle
+                        self.last_servo_angle_deg = self.smoothed_servo_angle_deg
+                        self.servo_angle_pub.publish(Float32(data=self.smoothed_servo_angle_deg))
                         # Tích lũy quãng đường đã đi
                         self.avoidance_distance += cmd.linear.x * dt
                     cmd.angular.z = 0.0
