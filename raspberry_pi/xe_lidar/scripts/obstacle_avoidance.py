@@ -545,9 +545,9 @@ class AutonomousDrive(Node):
         # Tổng PID output (normalized từ -1.0 đến 1.0)
         pid_output = p_term + i_term + d_term
         
-        # Tăng độ nhạy để servo quay mạnh hơn
-        # Nhân với hệ số để tăng phản ứng của servo
-        pid_output = pid_output * 1.5  # Tăng 50% độ nhạy
+        # Tăng độ nhạy để servo quay mạnh hơn - tăng hệ số để đạt ít nhất 30 độ khi rẽ
+        # Nhân với hệ số lớn hơn để tăng phản ứng của servo
+        pid_output = pid_output * 3.0  # Tăng 200% độ nhạy để đạt góc lớn hơn
         
         # Đảm bảo PID output có đủ độ lớn để điều khiển servo
         # Nếu error nhỏ nhưng không zero, vẫn cần có output nhỏ
@@ -562,8 +562,18 @@ class AutonomousDrive(Node):
         # pid_output = 0.0  -> servo_center_angle (đi thẳng)
         # pid_output = 1.0  -> servo_min_angle (rẽ phải tối đa)
         # Đảo dấu để phù hợp với hardware
+        # Tăng servo_range để đảm bảo góc quay lớn hơn khi có error
         servo_range = (self.servo_max_angle - self.servo_min_angle) / 2.0
-        servo_angle = self.servo_center_angle - pid_output * servo_range
+        # Đảm bảo góc servo tối thiểu 30 độ khi error lớn
+        # Nếu pid_output đạt 0.3 (30% của max), góc servo phải đạt ít nhất 30 độ
+        min_servo_range = 30.0  # Góc tối thiểu khi rẽ
+        if abs(pid_output) > 0.1:  # Nếu có error đáng kể
+            # Scale để đảm bảo góc tối thiểu
+            effective_range = max(servo_range, min_servo_range)
+        else:
+            effective_range = servo_range
+        
+        servo_angle = self.servo_center_angle - pid_output * effective_range
         
         # Clamp vào giới hạn
         servo_angle = max(self.servo_min_angle, min(self.servo_max_angle, servo_angle))
