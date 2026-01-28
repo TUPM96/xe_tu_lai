@@ -485,26 +485,69 @@ Có thể điều chỉnh khi chạy node:
 ros2 run xe_lidar obstacle_avoidance.py --ros-args \
     -p min_distance:=0.5 \
     -p safe_distance:=0.8 \
-    -p max_linear_speed:=0.168 \
+    -p max_linear_speed:=0.3 \
     -p max_angular_speed:=1.0 \
     -p front_angle_range:=60 \
     -p use_camera:=true \
-    -p kp:=0.5 \
-    -p ki:=0.0 \
-    -p kd:=0.0
+    -p kp:=0.7 \
+    -p ki:=0.01 \
+    -p kd:=0.1 \
+    -p lane_threshold_c:=25
 ```
 
 | Tham số | Mặc định | Mô tả |
 |---------|----------|-------|
 | `min_distance` | 0.5 | Khoảng cách tối thiểu để dừng (m) |
 | `safe_distance` | 0.8 | Khoảng cách an toàn để tránh (m) |
-| `max_linear_speed` | 0.168 | Tốc độ tối đa (m/s) |
+| `max_linear_speed` | 0.3 | Tốc độ tối đa (m/s) |
 | `max_angular_speed` | 1.0 | Tốc độ quay tối đa (rad/s) |
 | `kp` | 0.5 | Hệ số P cho bám làn (`angular = kp * error + ...`) |
 | `ki` | 0.0 | Hệ số I cho bám làn (tích phân lỗi, thường để nhỏ hoặc 0) |
 | `kd` | 0.0 | Hệ số D cho bám làn (phản ứng theo tốc độ thay đổi lỗi) |
 | `front_angle_range` | 60 | Góc phát hiện phía trước (degrees) |
 | `use_camera` | true | Bật/tắt camera lane following |
+| `lane_threshold_c` | 25 | Ngưỡng C cho lane detection (cao hơn = chỉ nhận màu đen hơn) |
+
+### Tham số Lane Detection (lane_threshold_c)
+
+Giá trị `lane_threshold_c` điều chỉnh độ nhạy khi phát hiện vạch đen:
+
+| Giá trị | Mô tả |
+|---------|-------|
+| 15-20 | Nhạy hơn - nhận cả màu tối hơn (có thể dính xám) |
+| 25 | Cân bằng (mặc định) |
+| 30-40 | Chỉ nhận màu đen đậm - loại bỏ xám hoàn toàn |
+
+**Ví dụ:**
+```bash
+# Nếu vẫn dính màu xám, tăng C lên
+ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=35
+
+# Nếu không nhận được vạch đen, giảm C xuống
+ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=20
+```
+
+### Tham số Arduino Bridge
+
+Điều chỉnh tốc độ và PWM motor qua Arduino Bridge:
+
+```bash
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
+    max_linear_speed:=0.3 \
+    motor_min_pwm:=100 \
+    lane_threshold_c:=25
+```
+
+| Tham số | Mặc định | Mô tả |
+|---------|----------|-------|
+| `max_linear_speed` | 0.3 | Tốc độ tối đa gửi tới Arduino (m/s) |
+| `motor_min_pwm` | 100 | PWM tối thiểu cho motor (0-255) |
+
+**Giao thức Serial Arduino:**
+- `V:linear:angular` - Điều khiển (linear m/s, angular rad/s)
+- `S:angle` - Debug servo trực tiếp (0-180 độ)
+- `C:angle` - Set góc mặc định servo
+- `M:max_speed:min_pwm` - Set tốc độ tối đa và PWM tối thiểu
 
 ---
 
