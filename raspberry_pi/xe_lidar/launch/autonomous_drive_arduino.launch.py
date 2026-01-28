@@ -149,6 +149,13 @@ def generate_launch_description():
         description='Vung chet - bo qua offset nho hon gia tri nay'
     )
 
+    # Tham số góc LiDAR phía trước để tránh vật cản
+    front_angle_range_arg = DeclareLaunchArgument(
+        'front_angle_range',
+        default_value='60',
+        description='Goc phia truoc (degrees) dung de kiem tra vat can bang LiDAR'
+    )
+
     # Tham số PID cho bám làn
     kp_arg = DeclareLaunchArgument(
         'kp',
@@ -166,6 +173,13 @@ def generate_launch_description():
         'kd',
         default_value='0.0',
         description='He so D cho PID bam lan'
+    )
+
+    # Hệ số giảm tốc khi vào cua (khi đang đánh lái)
+    cornering_speed_factor_arg = DeclareLaunchArgument(
+        'cornering_speed_factor',
+        default_value='0.6',
+        description='He so giam toc khi vao cua (0.0-1.0), vi du 0.6 = 60% toc do'
     )
 
     arduino_bridge_node = Node(
@@ -197,7 +211,7 @@ def generate_launch_description():
             'safe_distance': 0.8,
             'max_linear_speed': LaunchConfiguration('max_linear_speed'),
             'max_angular_speed': 1.0,
-            'front_angle_range': 60,
+            'front_angle_range': LaunchConfiguration('front_angle_range'),
             'use_camera': True,
             'camera_topic': '/camera/image_raw',
             # Tham số PID cho bám làn
@@ -208,6 +222,7 @@ def generate_launch_description():
             # Tham số làm mượt để tránh giật góc lái
             'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
             'lane_dead_zone': LaunchConfiguration('lane_dead_zone'),
+            'cornering_speed_factor': LaunchConfiguration('cornering_speed_factor'),
         }]
     )
     
@@ -238,9 +253,11 @@ def generate_launch_description():
         lane_threshold_c_arg,
         lane_offset_smoothing_arg,
         lane_dead_zone_arg,
+        front_angle_range_arg,
         kp_arg,
         ki_arg,
         kd_arg,
+        cornering_speed_factor_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,

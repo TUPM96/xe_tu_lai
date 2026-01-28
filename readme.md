@@ -371,54 +371,42 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     kd:=0.0 \
     lidar_serial_port:=/dev/ttyUSB0 \
     arduino_serial_port:=/dev/ttyACM0 \
-    video_device:=/dev/video0
+    video_device:=/dev/video0 \
+    front_angle_range:=60 \
+    cornering_speed_factor:=0.6
 ```
 
 **Tham số có thể cấu hình:**
 
 | Tham số | Mặc định | Mô tả |
 |---------|----------|-------|
-| `--speed`, `-s` | 0.3 | Tốc độ tối đa (m/s) |
-| `--pwm`, `-p` | 100 | PWM tối thiểu motor (0-255) |
-| `--threshold`, `-t` | 25 | Ngưỡng lane detection (cao = chỉ nhận đen) |
-| `--smooth` | 0.7 | Hệ số làm mượt (0.0-0.95) |
-| `--deadzone` | 0.05 | Vùng chết offset |
-| `--kp` | 0.5 | Hệ số P (PID) |
-| `--ki` | 0.0 | Hệ số I (PID) |
-| `--kd` | 0.0 | Hệ số D (PID) |
-| `--lidar` | /dev/ttyUSB0 | Port LiDAR |
-| `--arduino` | /dev/ttyACM0 | Port Arduino |
-| `--camera` | /dev/video0 | Device camera |
+| `max_linear_speed` | 0.3 | Tốc độ tối đa (m/s) |
+| `motor_min_pwm` | 100 | PWM tối thiểu motor (0-255) |
+| `lane_threshold_c` | 25 | Ngưỡng lane detection (cao = chỉ nhận đen) |
+| `lane_offset_smoothing` | 0.7 | Hệ số làm mượt (0.0-0.95) |
+| `lane_dead_zone` | 0.05 | Vùng chết offset |
+| `kp` | 0.5 | Hệ số P (PID) |
+| `ki` | 0.0 | Hệ số I (PID) |
+| `kd` | 0.0 | Hệ số D (PID) |
+| `front_angle_range` | 60 | Góc LiDAR phía trước để kiểm tra vật cản (độ) |
+| `cornering_speed_factor` | 0.6 | Hệ số giảm tốc khi vào cua (0.0–1.0) |
+| `lidar_serial_port` | /dev/ttyUSB0 | Port LiDAR |
+| `arduino_serial_port` | /dev/ttyACM0 | Port Arduino |
+| `video_device` | /dev/video0 | Device camera |
 
 **Ví dụ thực tế:**
 ```bash
 # Xe giật nhiều -> tăng smoothing
-python3 start_autonomous.py --smooth 0.85
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_offset_smoothing:=0.85
 
 # Chỉ nhận vạch đen đậm (loại bỏ xám)
-python3 start_autonomous.py --threshold 35
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py lane_threshold_c:=35
 
 # Tăng tốc độ
-python3 start_autonomous.py --speed 0.5 --pwm 120
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py max_linear_speed:=0.5 motor_min_pwm:=120
 
 # Điều chỉnh PID
-python3 start_autonomous.py --kp 0.7 --ki 0.01 --kd 0.1
-```
-
-**Hoặc dùng launch file trực tiếp (đầy đủ tham số):**
-```bash
-ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
-    max_linear_speed:=0.3 \
-    motor_min_pwm:=100 \
-    lane_threshold_c:=25 \
-    lane_offset_smoothing:=0.7 \
-    lane_dead_zone:=0.05 \
-    kp:=0.5 \
-    ki:=0.0 \
-    kd:=0.0 \
-    lidar_serial_port:=/dev/ttyUSB0 \
-    arduino_serial_port:=/dev/ttyACM0 \
-    video_device:=/dev/video0
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py kp:=0.7 ki:=0.01 kd:=0.1
 ```
 
 ### Cách 2: Chạy từng script riêng lẻ (Khuyến nghị để debug)
@@ -453,13 +441,16 @@ ros2 run xe_lidar start_arduino.py --port /dev/ttyACM0
 **Terminal 5 - Autonomous Drive:**
 ```bash
 # Chạy với giá trị mặc định
-python3 ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py
 
 # Hoặc với tham số tùy chỉnh
-python3 start_autonomous.py --speed 0.3 --smooth 0.7 --threshold 25
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
+    max_linear_speed:=0.3 \
+    lane_offset_smoothing:=0.7 \
+    lane_threshold_c:=25
 
-# Xem tất cả tham số
-python3 start_autonomous.py --help
+# Xem tất cả tham số khả dụng
+ros2 launch xe_lidar autonomous_drive_arduino.launch.py --show-args
 ```
 
 ### Cách 3: Chạy bằng launch files (Cách cũ)
@@ -581,6 +572,41 @@ ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=35
 ros2 run xe_lidar obstacle_avoidance.py --ros-args -p lane_threshold_c:=20
 ```
 
+### Nâng cao chất lượng nhận diện làn đường bằng Camera
+
+Node `obstacle_avoidance.py` đang dùng pipeline sau cho lane detection:
+
+- **ROI**: chỉ lấy phần dưới ảnh (40–100% chiều cao) – tập trung vào mặt đường.
+- **Grayscale + Gaussian Blur**: lọc nhiễu trước khi threshold.
+- **Adaptive Threshold (THRESH\_BINARY\_INV)** với tham số `lane_threshold_c` để bắt vạch đen trên nền sáng.
+- **Canny + HoughLinesP**: tìm các đoạn gần thẳng hai bên trái/phải.
+- **Tính tâm làn**: lấy trung bình các điểm dưới cùng của từng vạch, suy ra center và offset \(-1 → 1\).
+- **Smoothing + Dead Zone**:
+  - `lane_offset_smoothing`: lọc EMA để tránh giật (0.0 = phản ứng nhanh, 0.9 = cực mượt).
+  - `lane_dead_zone`: bỏ qua lệch nhỏ để xe đi thẳng ổn định.
+
+**Gợi ý tuning nâng cao:**
+
+- **Đường rõ, ánh sáng ổn định**:
+  - `lane_threshold_c`: 25–30
+  - `lane_offset_smoothing`: 0.6–0.75 (mượt vừa phải)
+  - `lane_dead_zone`: 0.05–0.08
+- **Nền nhiều nhiễu/xám, vạch đen đậm**:
+  - `lane_threshold_c`: 35–40 (lọc sạch xám, chỉ giữ đen)
+  - `lane_offset_smoothing`: 0.75–0.9 (rất mượt, tránh đánh lái liên tục)
+  - `lane_dead_zone`: 0.1–0.15 (xe ít lắc khi đi thẳng)
+- **Đường cong gắt, cần bám lane nhanh hơn**:
+  - `lane_offset_smoothing`: giảm xuống 0.4–0.6 (phản ứng nhanh hơn).
+  - Tăng nhẹ `kp` (0.7–0.9) và có thể thêm ít `kd` (0.05–0.1) để hạn chế overshoot.
+
+**Kết hợp với tốc độ khi vào cua (`cornering_speed_factor`):**
+
+- Khi `abs(angular.z)` lớn (đang đánh lái), node sẽ tự giảm tốc:
+  - `cornering_speed_factor := 0.4–0.6` → vào cua an toàn, ít trượt.
+  - `cornering_speed_factor := 0.7–0.9` → vào cua nhanh hơn, phù hợp mặt đường bám tốt.
+
+Bạn có thể thử nhanh trên thực tế bằng cách thay đổi trực tiếp tham số trong lệnh `ros2 launch xe_lidar autonomous_drive_arduino.launch.py` mà không cần sửa code.
+
 ### Tham số Làm Mượt Góc Lái (Smoothing)
 
 Khi xe bám làn, camera liên tục cập nhật offset và gửi góc lái mới. Nếu phản hồi quá nhanh, servo chưa kịp quay đến góc mong muốn thì đã nhận lệnh mới, gây ra hiện tượng "giật". Các tham số smoothing giúp làm mượt quá trình này:
@@ -624,7 +650,9 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     kd:=0.0 \
     lidar_serial_port:=/dev/ttyUSB0 \
     arduino_serial_port:=/dev/ttyACM0 \
-    video_device:=/dev/video0
+    video_device:=/dev/video0 \
+    front_angle_range:=60 \
+    cornering_speed_factor:=0.6
 ```
 
 | Tham số | Mặc định | Mô tả |
@@ -640,6 +668,8 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
 | `lidar_serial_port` | /dev/ttyUSB0 | Port LiDAR |
 | `arduino_serial_port` | /dev/ttyACM0 | Port Arduino |
 | `video_device` | /dev/video0 | Device camera |
+| `front_angle_range` | 60 | Góc LiDAR phía trước để kiểm tra vật cản (độ) |
+| `cornering_speed_factor` | 0.6 | Hệ số giảm tốc khi vào cua (0.0–1.0, càng nhỏ càng chậm khi cua) |
 
 **Giao thức Serial Arduino:**
 - `V:linear:angular` - Điều khiển (linear m/s, angular rad/s)

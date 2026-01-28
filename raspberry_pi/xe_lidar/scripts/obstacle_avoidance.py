@@ -39,6 +39,8 @@ class AutonomousDrive(Node):
         # Tham số làm mượt (smoothing) để tránh phản ứng quá nhanh
         self.declare_parameter('lane_offset_smoothing', 0.7)  # 0.0=không smooth, 0.9=rất smooth
         self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
+        # Hệ số giảm tốc khi vào cua (0.0 - 1.0), ví dụ 0.5 = giảm còn 50% tốc độ khi đang đánh lái
+        self.declare_parameter('cornering_speed_factor', 0.6)
 
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -54,6 +56,7 @@ class AutonomousDrive(Node):
         self.lane_threshold_c = int(self.get_parameter('lane_threshold_c').value)
         self.lane_offset_smoothing = float(self.get_parameter('lane_offset_smoothing').value)
         self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
+        self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
         self.lane_error_integral = 0.0
         self.lane_error_prev = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
@@ -515,6 +518,12 @@ class AutonomousDrive(Node):
                 max_angular_for_ackermann = self.max_angular_speed * 0.9  # 90% để an toàn
                 cmd.angular.z = max(-max_angular_for_ackermann,
                                    min(max_angular_for_ackermann, desired_angular))
+
+                # Giảm tốc độ khi đang vào cua (đang đánh lái)
+                if abs(cmd.angular.z) > 0.01:
+                    # cornering_speed_factor trong khoảng (0.0 - 1.0)
+                    # Ví dụ: 0.6 = chạy 60% tốc độ khi vào cua
+                    cmd.linear.x = self.max_linear_speed * self.cornering_speed_factor
 
                 # Log định kỳ về lane detection (mỗi 2 giây)
                 current_time = self.get_clock().now().seconds_nanoseconds()[0]
