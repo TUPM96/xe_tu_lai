@@ -182,13 +182,24 @@ def generate_launch_description():
         description='Goc phia truoc (degrees) dung de kiem tra vat can bang LiDAR'
     )
 
-    # Tham số điều khiển P cho bám làn
+    # Tham số PID điều khiển bám làn
     kp_arg = DeclareLaunchArgument(
         'kp',
         default_value='0.5',
         description='He so P cho PID bam lan'
     )
 
+    ki_arg = DeclareLaunchArgument(
+        'ki',
+        default_value='0.0',
+        description='He so I cho PID bam lan'
+    )
+
+    kd_arg = DeclareLaunchArgument(
+        'kd',
+        default_value='0.1',
+        description='He so D cho PID bam lan'
+    )
 
     # Hệ số giảm tốc khi vào cua (khi đang đánh lái)
     cornering_speed_factor_arg = DeclareLaunchArgument(
@@ -197,29 +208,29 @@ def generate_launch_description():
         description='He so giam toc khi vao cua (0.0-1.0), vi du 0.6 = 60% toc do'
     )
 
-    # Tham số state machine cho việc rẽ (hard-coded turn)
-    turn_distance_arg = DeclareLaunchArgument(
-        'turn_distance',
-        default_value='0.5',
-        description='Khoang cach re (m) - chay 50cm roi moi xet tiep'
+    # Tham số góc servo
+    servo_center_angle_arg = DeclareLaunchArgument(
+        'servo_center_angle',
+        default_value='100.0',
+        description='Goc servo giua (di thang) - degree'
     )
 
-    turn_speed_arg = DeclareLaunchArgument(
-        'turn_speed',
-        default_value='0.2',
-        description='Toc do khi re (m/s)'
+    servo_min_angle_arg = DeclareLaunchArgument(
+        'servo_min_angle',
+        default_value='45.0',
+        description='Goc servo toi thieu (re trai toi da) - degree'
     )
 
-    turn_trigger_threshold_arg = DeclareLaunchArgument(
-        'turn_trigger_threshold',
-        default_value='0.3',
-        description='Nguong offset de kich hoat re (0.0-1.0)'
+    servo_max_angle_arg = DeclareLaunchArgument(
+        'servo_max_angle',
+        default_value='155.0',
+        description='Goc servo toi da (re phai toi da) - degree'
     )
 
-    straight_speed_factor_arg = DeclareLaunchArgument(
-        'straight_speed_factor',
+    servo_angle_smoothing_arg = DeclareLaunchArgument(
+        'servo_angle_smoothing',
         default_value='0.8',
-        description='He so toc do khi di thang (0.0-1.0), vi du 0.8 = 80% toc do'
+        description='He so lam muot goc servo (0.0-1.0), cao hon = muot hon'
     )
 
     arduino_bridge_node = Node(
@@ -255,20 +266,21 @@ def generate_launch_description():
             'use_lidar': LaunchConfiguration('use_lidar'),
             'use_camera': LaunchConfiguration('use_camera'),
             'camera_topic': '/camera/image_raw',
-            # Tham số điều khiển P cho bám làn
+            # Tham số PID điều khiển bám làn
             'kp': LaunchConfiguration('kp'),
+            'ki': LaunchConfiguration('ki'),
+            'kd': LaunchConfiguration('kd'),
             # Tham số lane detection (Hough + adaptive threshold)
-            'lane_threshold_c': LaunchConfiguration('lane_threshold_c'),
             'lane_threshold_c': LaunchConfiguration('lane_threshold_c'),
             # Tham số làm mượt để tránh giật góc lái
             'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
             'lane_dead_zone': LaunchConfiguration('lane_dead_zone'),
             'cornering_speed_factor': LaunchConfiguration('cornering_speed_factor'),
-            # Tham số state machine cho việc rẽ
-            'turn_distance': LaunchConfiguration('turn_distance'),
-            'turn_speed': LaunchConfiguration('turn_speed'),
-            'turn_trigger_threshold': LaunchConfiguration('turn_trigger_threshold'),
-            'straight_speed_factor': LaunchConfiguration('straight_speed_factor'),
+            # Tham số góc servo
+            'servo_center_angle': LaunchConfiguration('servo_center_angle'),
+            'servo_min_angle': LaunchConfiguration('servo_min_angle'),
+            'servo_max_angle': LaunchConfiguration('servo_max_angle'),
+            'servo_angle_smoothing': LaunchConfiguration('servo_angle_smoothing'),
         }]
     )
     
@@ -305,11 +317,13 @@ def generate_launch_description():
         use_camera_arg,
         front_angle_range_arg,
         kp_arg,
+        ki_arg,
+        kd_arg,
         cornering_speed_factor_arg,
-        turn_distance_arg,
-        turn_speed_arg,
-        turn_trigger_threshold_arg,
-        straight_speed_factor_arg,
+        servo_center_angle_arg,
+        servo_min_angle_arg,
+        servo_max_angle_arg,
+        servo_angle_smoothing_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,

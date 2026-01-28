@@ -14,13 +14,6 @@ import cv2
 import numpy as np
 import math
 from std_msgs.msg import Float32
-from enum import Enum
-
-
-class TurnState(Enum):
-    """Trạng thái của state machine cho việc rẽ"""
-    IDLE = 0        # Đang chạy thẳng, sẵn sàng nhận lệnh rẽ mới
-    TURNING = 1     # Đang thực hiện rẽ, bỏ qua lane detection cho đến khi hoàn thành
 
 
 class AutonomousDrive(Node):
@@ -39,8 +32,10 @@ class AutonomousDrive(Node):
         self.declare_parameter('camera_topic', '/camera/image_raw')  # Topic camera
         self.declare_parameter('max_steer_angle', 0.5236)  # Góc lái tối đa (rad) ~30 degrees
         self.declare_parameter('debug_camera', False)  # Hiển thị debug camera output
-        # Tham số điều khiển bám làn (P thuần)
-        self.declare_parameter('kp', 0.5)
+        # Tham số PID điều khiển bám làn
+        self.declare_parameter('kp', 0.5)  # Proportional gain
+        self.declare_parameter('ki', 0.0)   # Integral gain
+        self.declare_parameter('kd', 0.1)  # Derivative gain
         # Tham số lane detection - C càng cao thì chỉ nhận màu đen hơn (loại bỏ xám)
         self.declare_parameter('lane_threshold_c', 25)  # Giá trị C trong adaptive threshold
         # Tham số làm mượt (smoothing) để tránh phản ứng quá nhanh
@@ -48,19 +43,12 @@ class AutonomousDrive(Node):
         self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
         # Hệ số giảm tốc khi vào cua (0.0 - 1.0), ví dụ 0.5 = giảm còn 50% tốc độ khi đang đánh lái
         self.declare_parameter('cornering_speed_factor', 0.6)
-        # Tham số điều khiển rẽ kiểu "bật công tắc"
-        self.declare_parameter('turn_trigger_angular', 0.3)   # chưa dùng cho góc trực tiếp, giữ lại nếu cần
-        self.declare_parameter('turn_command_angular', 0.5)   # chưa dùng khi điều khiển theo góc servo
-        # Tham số góc servo (degree) - dùng khi xuất lệnh góc trực tiếp từ Python
-        self.declare_parameter('servo_center_angle', 100.0)
-        self.declare_parameter('servo_left_angle', 45.0)
-        self.declare_parameter('servo_right_angle', 155.0)
-
-        # Tham số state machine cho việc rẽ (hard-coded turn)
-        self.declare_parameter('turn_distance', 0.5)        # Khoảng cách rẽ (m) - chạy 50cm rồi mới xét tiếp
-        self.declare_parameter('turn_speed', 0.2)           # Tốc độ khi rẽ (m/s)
-        self.declare_parameter('turn_trigger_threshold', 0.3)  # Ngưỡng offset để kích hoạt rẽ (0.0-1.0)
-        self.declare_parameter('straight_speed_factor', 0.8)  # Hệ số tốc độ khi đi thẳng (0.0-1.0)
+        # Tham số góc servo (degree) - giới hạn và góc giữa
+        self.declare_parameter('servo_center_angle', 100.0)  # Góc giữa (đi thẳng)
+        self.declare_parameter('servo_min_angle', 45.0)      # Góc tối thiểu (rẽ trái tối đa)
+        self.declare_parameter('servo_max_angle', 155.0)     # Góc tối đa (rẽ phải tối đa)
+        # Tham số làm mượt góc servo để tránh chuyển góc quá gấp
+        self.declare_parameter('servo_angle_smoothing', 0.8)  # EMA filter cho góc servo (0.0-1.0)
 
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -72,29 +60,27 @@ class AutonomousDrive(Node):
         self.max_steer_angle = self.get_parameter('max_steer_angle').value
         self.debug_camera = self.get_parameter('debug_camera').value
         self.kp = float(self.get_parameter('kp').value)
+        self.ki = float(self.get_parameter('ki').value)
+        self.kd = float(self.get_parameter('kd').value)
         self.lane_threshold_c = int(self.get_parameter('lane_threshold_c').value)
         self.lane_offset_smoothing = float(self.get_parameter('lane_offset_smoothing').value)
         self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
         self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
-        self.turn_trigger_angular = float(self.get_parameter('turn_trigger_angular').value)
-        self.turn_command_angular = float(self.get_parameter('turn_command_angular').value)
         self.servo_center_angle = float(self.get_parameter('servo_center_angle').value)
-        self.servo_left_angle = float(self.get_parameter('servo_left_angle').value)
-        self.servo_right_angle = float(self.get_parameter('servo_right_angle').value)
-        self.turn_distance = float(self.get_parameter('turn_distance').value)
-        self.turn_speed = float(self.get_parameter('turn_speed').value)
-        self.turn_trigger_threshold = float(self.get_parameter('turn_trigger_threshold').value)
-        self.straight_speed_factor = float(self.get_parameter('straight_speed_factor').value)
-        self.last_servo_angle_deg = 0.0
-        self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
+        self.servo_min_angle = float(self.get_parameter('servo_min_angle').value)
+        self.servo_max_angle = float(self.get_parameter('servo_max_angle').value)
+        self.servo_angle_smoothing = float(self.get_parameter('servo_angle_smoothing').value)
+        
+        # PID control variables
+        self.pid_integral = 0.0
+        self.pid_last_error = 0.0
+        self.last_control_time = self.get_clock().now().seconds_nanoseconds()[0] + \
+                                 self.get_clock().now().seconds_nanoseconds()[1] / 1e9
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
-
-        # State machine cho việc rẽ
-        self.turn_state = TurnState.IDLE
-        self.turn_start_time = 0.0
-        self.turn_duration = self.turn_distance / self.turn_speed  # Thời gian rẽ = quãng đường / tốc độ
-        self.turn_direction = 0  # -1: trái, 0: thẳng, 1: phải
-        self.turn_servo_angle = self.servo_center_angle  # Góc servo hiện tại khi rẽ
+        
+        # Servo angle smoothing
+        self.last_servo_angle_deg = self.servo_center_angle  # Khởi tạo ở góc giữa
+        self.smoothed_servo_angle_deg = self.servo_center_angle
         
         # Subscribers
         if self.use_lidar:
@@ -395,26 +381,35 @@ class AutonomousDrive(Node):
             alpha = self.lane_offset_smoothing
             self.smoothed_lane_offset = alpha * self.smoothed_lane_offset + (1 - alpha) * self.lane_center_offset
 
+            # Tính toán góc servo từ PID (sẽ được tính trong control_loop, nhưng cần để hiển thị)
+            # Tạm thời dùng smoothed_lane_offset để hiển thị
+            steering_offset = -self.smoothed_lane_offset
+            
             # Ve text thong tin
             status_text = "LANE OK" if self.lane_detected else "NO LANE"
             left_text = f"L:{left_bottom_x:.0f}" if left_bottom_x else "L:--"
             right_text = f"R:{right_bottom_x:.0f}" if right_bottom_x else "R:--"
             offset_text = f"Raw:{self.lane_center_offset:.2f} Smooth:{self.smoothed_lane_offset:.2f}"
+            servo_text = f"Servo: {self.smoothed_servo_angle_deg:.1f}°"
 
             cv2.putText(image_with_lanes, f"{status_text} | {left_text} | {right_text}", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             cv2.putText(image_with_lanes, offset_text, (10, 60),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(image_with_lanes, servo_text, (10, 90),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
             # Ve huong can di
             if self.lane_detected:
+                # Tính toán góc servo từ offset để hiển thị hướng
+                # Tính góc servo từ offset (sẽ được tính chính xác trong control_loop)
+                servo_offset_from_center = self.smoothed_servo_angle_deg - self.servo_center_angle
+                normalized_offset = servo_offset_from_center / ((self.servo_max_angle - self.servo_min_angle) / 2)
+                
                 # Tinh vi tri de ve mui ten chi huong
                 arrow_x = int(center_x)
                 arrow_y = int(height * 0.75)
-
-                # Dao dau de khop voi huong steering thuc te
-                steering_offset = -self.smoothed_lane_offset
-                offset_pixels = int(steering_offset * width * 0.4)
+                offset_pixels = int(normalized_offset * width * 0.3)
                 arrow_end_x = arrow_x + offset_pixels
                 arrow_end_y = arrow_y - 60
 
@@ -425,21 +420,21 @@ class AutonomousDrive(Node):
                                    (arrow_end_x, arrow_end_y),
                                    (0, 255, 255), 5, tipLength=0.3)
 
-                # Text huong di
-                if abs(steering_offset) < 0.02:
+                # Text huong di - dựa trên góc servo thực tế
+                if abs(servo_offset_from_center) < 2.0:  # Gần góc giữa
                     direction_text = "DI THANG"
                     direction_color = (0, 255, 0)
-                elif steering_offset > 0:
-                    direction_text = f"RE TRAI ({abs(steering_offset):.2f})"
+                elif servo_offset_from_center < 0:  # Góc < center -> rẽ trái
+                    direction_text = f"RE TRAI ({abs(servo_offset_from_center):.1f}°)"
                     direction_color = (255, 165, 0)
-                else:
-                    direction_text = f"RE PHAI ({abs(steering_offset):.2f})"
+                else:  # Góc > center -> rẽ phải
+                    direction_text = f"RE PHAI ({servo_offset_from_center:.1f}°)"
                     direction_color = (255, 165, 0)
 
-                cv2.putText(image_with_lanes, direction_text, (10, 90),
+                cv2.putText(image_with_lanes, direction_text, (10, 120),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, direction_color, 2)
             else:
-                cv2.putText(image_with_lanes, "KHONG THAY LANE", (10, 90),
+                cv2.putText(image_with_lanes, "KHONG THAY LANE", (10, 120),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             # Publish anh da ve
@@ -454,6 +449,48 @@ class AutonomousDrive(Node):
             self.lane_detected = False
             self.lane_center_offset = 0.0
     
+    def calculate_servo_angle_from_pid(self, error, dt):
+        """
+        Tính toán góc servo từ lane offset error bằng PID control
+        
+        Args:
+            error: Lane offset error (-1.0 đến 1.0, âm = lệch trái, dương = lệch phải)
+            dt: Delta time (seconds)
+        
+        Returns:
+            Góc servo (degrees) trong giới hạn [servo_min_angle, servo_max_angle]
+        """
+        # Proportional term
+        p_term = self.kp * error
+        
+        # Integral term (với anti-windup)
+        self.pid_integral += error * dt
+        # Giới hạn integral để tránh windup
+        max_integral = 1.0 / max(self.ki, 0.001) if self.ki > 0 else 10.0
+        self.pid_integral = max(-max_integral, min(max_integral, self.pid_integral))
+        i_term = self.ki * self.pid_integral
+        
+        # Derivative term
+        d_error = (error - self.pid_last_error) / max(dt, 0.001)
+        d_term = self.kd * d_error
+        self.pid_last_error = error
+        
+        # Tổng PID output (normalized từ -1.0 đến 1.0)
+        pid_output = p_term + i_term + d_term
+        pid_output = max(-1.0, min(1.0, pid_output))  # Clamp
+        
+        # Chuyển đổi sang góc servo
+        # pid_output = -1.0 -> servo_min_angle (rẽ trái tối đa)
+        # pid_output = 0.0  -> servo_center_angle (đi thẳng)
+        # pid_output = 1.0  -> servo_max_angle (rẽ phải tối đa)
+        servo_range = (self.servo_max_angle - self.servo_min_angle) / 2.0
+        servo_angle = self.servo_center_angle + pid_output * servo_range
+        
+        # Clamp vào giới hạn
+        servo_angle = max(self.servo_min_angle, min(self.servo_max_angle, servo_angle))
+        
+        return servo_angle
+    
     def control_loop(self):
         """
         Vòng lặp điều khiển chính cho Ackermann Steering:
@@ -463,9 +500,10 @@ class AutonomousDrive(Node):
         cmd = Twist()
 
         # Tính delta thời gian cho PID (giả sử timer 0.1s, nhưng vẫn đo chính xác)
-        now = self.get_clock().now().seconds_nanoseconds()[0]
-        dt = max(0.01, now - getattr(self, "last_control_time", now))
-        self.last_control_time = now
+        current_time = self.get_clock().now().seconds_nanoseconds()[0] + \
+                       self.get_clock().now().seconds_nanoseconds()[1] / 1e9
+        dt = max(0.01, current_time - self.last_control_time)
+        self.last_control_time = current_time
         
         # Nếu đang dùng LiDAR, xử lý trường hợp chưa có dữ liệu LiDAR (chạy chậm để an toàn)
         if self.use_lidar:
@@ -504,109 +542,66 @@ class AutonomousDrive(Node):
                 cmd.angular.z = self.max_angular_speed * 0.7
                 self.get_logger().info('⚠️ Vat can ben phai - Quay trai de tranh')
         else:
-            # KHÔNG có vật cản (hoặc đã tắt LiDAR) - Sử dụng STATE MACHINE để điều khiển rẽ
-            current_time = self.get_clock().now().seconds_nanoseconds()[0] + \
-                           self.get_clock().now().seconds_nanoseconds()[1] / 1e9
-
-            # ==================== STATE MACHINE CHO VIỆC RẼ ====================
-            if self.turn_state == TurnState.TURNING:
-                # Đang trong trạng thái RẼ - tiếp tục rẽ cho đến khi hoàn thành
-                elapsed = current_time - self.turn_start_time
-
-                if elapsed >= self.turn_duration:
-                    # Đã rẽ xong - quay về IDLE
-                    self.turn_state = TurnState.IDLE
-                    self.get_logger().info(
-                        f'✅ Hoàn thành rẽ {"trái" if self.turn_direction < 0 else "phải"} '
-                        f'sau {elapsed:.2f}s ({self.turn_distance}m)'
-                    )
-                    # Về servo giữa
-                    self.turn_servo_angle = self.servo_center_angle
-                    cmd.linear.x = self.max_linear_speed
-                else:
-                    # Vẫn đang rẽ - giữ nguyên góc servo và tốc độ chậm
-                    cmd.linear.x = self.turn_speed
-                    remaining = self.turn_duration - elapsed
-
-                    # Log tiến trình rẽ (mỗi 0.5 giây)
-                    if int(elapsed * 2) != int((elapsed - dt) * 2):
-                        self.get_logger().info(
-                            f'🔄 Đang rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
-                            f'{elapsed:.1f}s/{self.turn_duration:.1f}s, '
-                            f'còn {remaining:.1f}s, servo={self.turn_servo_angle:.0f}°'
-                        )
-
-                # Gửi góc servo cố định trong suốt quá trình rẽ
-                cmd.angular.z = 0.0
-                self.last_servo_angle_deg = float(self.turn_servo_angle)
+            # KHÔNG có vật cản (hoặc đã tắt LiDAR) - Sử dụng PID để điều khiển góc servo
+            if self.use_camera and self.lane_detected:
+                # Tính toán error từ lane offset
+                # smoothed_lane_offset: âm = lệch trái, dương = lệch phải
+                # error cho PID: dương = cần rẽ phải, âm = cần rẽ trái
+                error = -self.smoothed_lane_offset  # Đảo dấu để phù hợp với PID
+                
+                # Áp dụng dead zone
+                if abs(error) < self.lane_dead_zone:
+                    error = 0.0
+                
+                # Tính góc servo từ PID
+                target_servo_angle = self.calculate_servo_angle_from_pid(error, dt)
+                
+                # Làm mượt góc servo để tránh chuyển góc quá gấp
+                alpha = self.servo_angle_smoothing
+                self.smoothed_servo_angle_deg = alpha * self.smoothed_servo_angle_deg + (1 - alpha) * target_servo_angle
+                
+                # Gửi góc servo tới Arduino
+                self.last_servo_angle_deg = self.smoothed_servo_angle_deg
                 self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
-
-            else:
-                # STATE = IDLE - xét xem có cần rẽ không
-                if self.use_camera and self.lane_detected:
-                    # Dùng RAW offset để trigger rẽ (phản ứng nhanh hơn)
-                    raw_error = float(self.lane_center_offset)
-
-                    # Kiểm tra có cần kích hoạt rẽ không (offset vượt ngưỡng)
-                    if abs(raw_error) >= self.turn_trigger_threshold:
-                        # BẮT ĐẦU RẼ - chuyển sang trạng thái TURNING
-                        self.turn_state = TurnState.TURNING
-                        self.turn_start_time = current_time
-
-                        if raw_error > 0.0:
-                            # Lệch sang phải -> rẽ trái để về giữa
-                            self.turn_direction = -1
-                            self.turn_servo_angle = self.servo_right_angle  # Đổi: dùng right_angle cho rẽ trái
-                        else:
-                            # Lệch sang trái -> rẽ phải để về giữa
-                            self.turn_direction = 1
-                            self.turn_servo_angle = self.servo_left_angle  # Đổi: dùng left_angle cho rẽ phải
-
-                        self.get_logger().info(
-                            f'🚗 Bắt đầu rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
-                            f'raw_offset={raw_error:.2f}, servo={self.turn_servo_angle:.0f}°, '
-                            f'duration={self.turn_duration:.2f}s'
-                        )
-
-                        # Gửi lệnh rẽ
-                        cmd.linear.x = self.turn_speed
-                        cmd.angular.z = 0.0
-                        self.last_servo_angle_deg = float(self.turn_servo_angle)
-                        self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
-
-                    elif abs(raw_error) < self.lane_dead_zone:
-                        # Đi thẳng - không cần rẽ (áp dụng straight_speed_factor)
-                        cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
-                        cmd.angular.z = 0.0
-                        self.last_servo_angle_deg = float(self.servo_center_angle)
-                        self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
-
+                
+                # Tính tốc độ dựa trên góc lái (giảm tốc khi vào cua)
+                servo_offset_from_center = abs(self.smoothed_servo_angle_deg - self.servo_center_angle)
+                max_servo_offset = (self.servo_max_angle - self.servo_min_angle) / 2.0
+                cornering_factor = 1.0 - (servo_offset_from_center / max_servo_offset) * (1.0 - self.cornering_speed_factor)
+                cornering_factor = max(self.cornering_speed_factor, min(1.0, cornering_factor))
+                
+                cmd.linear.x = self.max_linear_speed * cornering_factor
+                cmd.angular.z = 0.0  # Không dùng angular, chỉ dùng góc servo trực tiếp
+                
+                # Log định kỳ về lane detection (mỗi 2 giây)
+                if current_time - self.last_lane_log_time >= 2.0:
+                    servo_offset = self.smoothed_servo_angle_deg - self.servo_center_angle
+                    if abs(servo_offset) < 2.0:
+                        direction_str = "DI THANG"
+                    elif servo_offset < 0:
+                        direction_str = f"RE TRAI ({abs(servo_offset):.1f}°)"
                     else:
-                        # Offset nhỏ - điều chỉnh nhẹ (giữa dead_zone và trigger_threshold)
-                        # Vẫn chạy thẳng với tốc độ giảm nhẹ hơn nữa, servo về giữa
-                        cmd.linear.x = self.max_linear_speed * self.straight_speed_factor * 0.8
-                        cmd.angular.z = 0.0
-                        self.last_servo_angle_deg = float(self.servo_center_angle)
-                        self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
-
-                    # Log định kỳ về lane detection (mỗi 2 giây)
+                        direction_str = f"RE PHAI ({servo_offset:.1f}°)"
+                    
+                    self.get_logger().info(
+                        f'📷 Lane - Error: {error:.3f}, Servo: {self.smoothed_servo_angle_deg:.1f}°, '
+                        f'{direction_str}, Speed: {cmd.linear.x:.2f} m/s'
+                    )
+                    self.last_lane_log_time = current_time
+            else:
+                # Không phát hiện được vạch kẻ đường -> DỪNG LẠI
+                cmd.linear.x = 0.0
+                cmd.angular.z = 0.0
+                # Đặt servo về góc giữa khi không thấy lane
+                self.smoothed_servo_angle_deg = self.servo_center_angle
+                self.last_servo_angle_deg = self.servo_center_angle
+                self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
+                
+                if self.use_camera:
+                    # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
                     if current_time - self.last_lane_log_time >= 2.0:
-                        state_str = "TURNING" if self.turn_state == TurnState.TURNING else "IDLE"
-                        self.get_logger().info(
-                            f'📷 [{state_str}] Lane - Raw: {raw_error:.2f}, '
-                            f'Trigger: {self.turn_trigger_threshold}, '
-                            f'ServoCmd: {self.last_servo_angle_deg:.1f}°'
-                        )
+                        self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
                         self.last_lane_log_time = current_time
-                else:
-                    # Không phát hiện được vạch kẻ đường -> DỪNG LẠI (an toàn hơn là đi thẳng)
-                    cmd.linear.x = 0.0
-                    cmd.angular.z = 0.0
-                    if self.use_camera:
-                        # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
-                        if current_time - self.last_lane_log_time >= 2.0:
-                            self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
-                            self.last_lane_log_time = current_time
         
         self.cmd_vel_pub.publish(cmd)
 
