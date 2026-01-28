@@ -498,8 +498,8 @@ class AutonomousDrive(Node):
                     error = 0.0
 
                 # Điều khiển P: angular ~ Kp * error (đã nhân max_angular_speed)
-                # Đảo dấu để khớp với hướng servo/Arduino thực tế
-                desired_angular = -self.kp * error * self.max_angular_speed
+                # Nếu servo đang quay ngược, đảo dấu ở đây để đổi hướng
+                desired_angular = self.kp * error * self.max_angular_speed
 
                 # Giới hạn angular velocity theo max_steer_angle của Ackermann
                 # Giả sử wheelbase = 0.4m, vận tốc max = 0.3 m/s
