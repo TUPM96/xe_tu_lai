@@ -44,6 +44,7 @@ float max_linear_velocity = 1.0;  // Tốc độ tối đa (m/s) - có thể set
 
 // ==================== BIẾN TOÀN CỤC ====================
 #include <Servo.h>
+#include <math.h>
 
 Servo steering_servo;
 
@@ -59,6 +60,23 @@ int debug_servo_angle = -1;
 // Buffer để nhận dữ liệu Serial
 String inputString = "";
 boolean stringComplete = false;
+
+// ==================== TRẠNG THÁI RẼ CỐ ĐỊNH ====================
+// Khi ROS gửi angular đủ lớn, Arduino tự thực hiện kịch bản rẽ:
+// - Rẽ phải: servo = 130 độ, chạy ~0.5m, rồi trả về center và chạy thẳng tiếp
+// - Rẽ trái: servo = 70 độ, chạy ~0.5m, rồi trả về center và chạy thẳng tiếp
+enum TurnState { TURN_IDLE, TURN_RUNNING };
+TurnState turn_state = TURN_IDLE;
+int turn_direction = 0;                 // 1 = phải, -1 = trái
+unsigned long turn_start_time = 0;
+
+const float TURN_DISTANCE_M      = 0.5f;   // 50 cm
+const float TURN_SPEED_MPS       = 0.20f;  // tốc độ khi rẽ (m/s)
+const float STRAIGHT_SPEED_MPS   = 0.20f;  // tốc độ sau khi rẽ xong
+const float TURN_TRIGGER_ANGULAR = 0.30f;  // |angular| lớn hơn ngưỡng này sẽ kích hoạt chế độ rẽ
+
+const int TURN_SERVO_RIGHT_ANGLE = 130;    // góc servo khi rẽ phải
+const int TURN_SERVO_LEFT_ANGLE  = 70;     // góc servo khi rẽ trái
 
 // ==================== SETUP ====================
 void setup() {
@@ -159,6 +177,19 @@ void parseCommand(String cmd) {
       
       last_command_time = millis();
       debug_servo_angle = -1;  // Khi co cmd_vel thi tat che do giu debug
+
+      // Nếu không ở trong chế độ rẽ cố định, kiểm tra xem có cần kích hoạt rẽ không
+      if (turn_state == TURN_IDLE) {
+        if (fabs(current_linear) > 0.01f && fabs(current_angular) > TURN_TRIGGER_ANGULAR) {
+          // Bắt đầu pha rẽ cố định
+          turn_state = TURN_RUNNING;
+          turn_direction = (current_angular > 0.0f) ? 1 : -1;  // 1: phải, -1: trái
+          turn_start_time = millis();
+          // Khóa vận tốc rẽ độc lập với lệnh sau
+          current_linear  = TURN_SPEED_MPS;
+          current_angular = 0.0f;  // không dùng angular trong pha rẽ, chỉ dùng servo cố định
+        }
+      }
     }
   }
   // Debug: "S:angle" - set servo truc tiep va GIU tai do (cmd_vel khong ghi de)
@@ -203,7 +234,13 @@ void parseCommand(String cmd) {
 
 // ==================== CẬP NHẬT ĐIỀU KHIỂN ====================
 void updateControl() {
-  // Neu dang giu debug (S:angle) thi chi ghi servo, khong dung cmd_vel
+  // Nếu đang trong chế độ rẽ cố định, xử lý riêng
+  if (turn_state == TURN_RUNNING) {
+    handleTurnState();
+    return;
+  }
+
+  // Nếu đang ở chế độ debug servo (S:angle) thì chỉ giữ servo tại góc đặt
   if (debug_servo_angle >= 0) {
     steering_servo.write(debug_servo_angle);
   } else {
@@ -211,8 +248,29 @@ void updateControl() {
     controlSteering(steering_angle);
   }
   
-  // Motor van theo cmd_vel
+  // Điều khiển motor theo current_linear (tiến/lùi)
   controlMotors(current_linear);
+}
+
+// ==================== XỬ LÝ PHA RẼ CỐ ĐỊNH ====================
+void handleTurnState() {
+  unsigned long now = millis();
+  unsigned long duration_ms = (unsigned long)((TURN_DISTANCE_M / TURN_SPEED_MPS) * 1000.0f);
+
+  if (now - turn_start_time >= duration_ms) {
+    // Hoàn thành pha rẽ: trả servo về giữa, tiếp tục đi thẳng
+    steering_servo.write(servo_center);
+    current_linear  = STRAIGHT_SPEED_MPS;
+    current_angular = 0.0f;
+    controlMotors(current_linear);
+    turn_state = TURN_IDLE;
+    return;
+  }
+
+  // Đang rẽ: giữ servo ở góc cố định và chạy với tốc độ TURN_SPEED_MPS
+  int target_angle = (turn_direction > 0) ? TURN_SERVO_RIGHT_ANGLE : TURN_SERVO_LEFT_ANGLE;
+  steering_servo.write(target_angle);
+  controlMotors(TURN_SPEED_MPS);
 }
 
 // ==================== TÍNH GÓC LÁI (ACKERMANN) ====================

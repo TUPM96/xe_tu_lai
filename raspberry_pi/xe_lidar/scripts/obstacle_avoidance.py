@@ -13,6 +13,7 @@ from geometry_msgs.msg import Twist
 import cv2
 import numpy as np
 import math
+from std_msgs.msg import Float32
 
 
 class AutonomousDrive(Node):
@@ -40,6 +41,9 @@ class AutonomousDrive(Node):
         self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
         # Hệ số giảm tốc khi vào cua (0.0 - 1.0), ví dụ 0.5 = giảm còn 50% tốc độ khi đang đánh lái
         self.declare_parameter('cornering_speed_factor', 0.6)
+        # Tham số điều khiển rẽ kiểu "bật công tắc" để kích hoạt kịch bản rẽ trên Arduino
+        self.declare_parameter('turn_trigger_angular', 0.3)   # |angular| tối thiểu để coi là đang rẽ
+        self.declare_parameter('turn_command_angular', 0.5)   # |angular| gửi xuống Arduino khi rẽ
 
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -55,6 +59,8 @@ class AutonomousDrive(Node):
         self.lane_offset_smoothing = float(self.get_parameter('lane_offset_smoothing').value)
         self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
         self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
+        self.turn_trigger_angular = float(self.get_parameter('turn_trigger_angular').value)
+        self.turn_command_angular = float(self.get_parameter('turn_command_angular').value)
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
         
@@ -91,6 +97,8 @@ class AutonomousDrive(Node):
             '/cmd_vel',
             10
         )
+        # Publisher debug góc servo mong muốn (ước tính từ lệnh quay)
+        self.servo_angle_pub = self.create_publisher(Float32, '/servo_desired_angle', 10)
         
         # State variables
         self.latest_scan = None
@@ -486,28 +494,39 @@ class AutonomousDrive(Node):
                 cmd.linear.x = self.max_linear_speed
 
                 # Điều chỉnh góc quay dựa trên offset từ giữa đường (Ackermann steering)
-                # QUAN TRỌNG:
-                # - lane_center_offset > 0: xe lệch PHẢI → cần quay TRÁI (angular.z > 0)
-                # - lane_center_offset < 0: xe lệch TRÁI → cần quay PHẢI (angular.z < 0)
-                # - ROS2 convention: angular.z dương = quay trái, angular.z âm = quay phải
-
-                # Điều khiển P thuần cho bám làn - dùng smoothed offset để tránh giật
+                # Thay vì PID liên tục, dùng điều khiển kiểu "bật công tắc":
+                # - Nếu lệch nhỏ hơn dead_zone -> đi thẳng (angular = 0)
+                # - Nếu lệch đủ lớn -> gửi angular cố định (±turn_command_angular)
                 error = float(self.smoothed_lane_offset)
-                # Áp dụng dead zone CHỈ cho điều khiển (không thay đổi smoothed gốc)
-                if abs(error) < self.lane_dead_zone:
-                    error = 0.0
 
-                # Điều khiển P: angular ~ Kp * error (đã nhân max_angular_speed)
-                # Nếu servo đang quay ngược, đảo dấu ở đây để đổi hướng
-                desired_angular = self.kp * error * self.max_angular_speed
+                if abs(error) < self.lane_dead_zone:
+                    desired_angular = 0.0
+                else:
+                    direction = 1.0 if error > 0.0 else -1.0
+                    desired_angular = direction * self.turn_command_angular
 
                 # Giới hạn angular velocity theo max_steer_angle của Ackermann
-                # Giả sử wheelbase = 0.4m, vận tốc max = 0.3 m/s
-                # max_angular = v / (wheelbase / tan(max_steer_angle))
-                # Nhưng để đơn giản, giới hạn bằng tỷ lệ của max_angular_speed
                 max_angular_for_ackermann = self.max_angular_speed * 0.9  # 90% để an toàn
                 cmd.angular.z = max(-max_angular_for_ackermann,
                                    min(max_angular_for_ackermann, desired_angular))
+
+                # Ước tính góc servo tương ứng (để debug / quan sát)
+                try:
+                    WHEELBASE = 0.4
+                    MAX_STEER_ANGLE = 0.5236  # ~30 độ
+                    SERVO_CENTER = 100.0
+                    SERVO_RANGE = 45.0
+
+                    v_mag = max(0.01, abs(cmd.linear.x))
+                    effective_angular = cmd.angular.z
+                    steer_angle = math.atan(WHEELBASE * effective_angular / v_mag)
+                    steer_angle = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer_angle))
+
+                    normalized = steer_angle / MAX_STEER_ANGLE  # -1..1
+                    servo_angle_deg = SERVO_CENTER + normalized * SERVO_RANGE
+                    self.servo_angle_pub.publish(Float32(data=float(servo_angle_deg)))
+                except Exception:
+                    pass
 
                 # Giảm tốc độ khi đang vào cua (đang đánh lái)
                 if abs(cmd.angular.z) > 0.01:
