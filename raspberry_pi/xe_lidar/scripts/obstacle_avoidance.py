@@ -41,9 +41,13 @@ class AutonomousDrive(Node):
         self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
         # Hệ số giảm tốc khi vào cua (0.0 - 1.0), ví dụ 0.5 = giảm còn 50% tốc độ khi đang đánh lái
         self.declare_parameter('cornering_speed_factor', 0.6)
-        # Tham số điều khiển rẽ kiểu "bật công tắc" để kích hoạt kịch bản rẽ trên Arduino
-        self.declare_parameter('turn_trigger_angular', 0.3)   # |angular| tối thiểu để coi là đang rẽ
-        self.declare_parameter('turn_command_angular', 0.5)   # |angular| gửi xuống Arduino khi rẽ
+        # Tham số điều khiển rẽ kiểu "bật công tắc"
+        self.declare_parameter('turn_trigger_angular', 0.3)   # chưa dùng cho góc trực tiếp, giữ lại nếu cần
+        self.declare_parameter('turn_command_angular', 0.5)   # chưa dùng khi điều khiển theo góc servo
+        # Tham số góc servo (degree) - dùng khi xuất lệnh góc trực tiếp từ Python
+        self.declare_parameter('servo_center_angle', 100.0)
+        self.declare_parameter('servo_left_angle', 45.0)
+        self.declare_parameter('servo_right_angle', 155.0)
 
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -61,6 +65,10 @@ class AutonomousDrive(Node):
         self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
         self.turn_trigger_angular = float(self.get_parameter('turn_trigger_angular').value)
         self.turn_command_angular = float(self.get_parameter('turn_command_angular').value)
+        self.servo_center_angle = float(self.get_parameter('servo_center_angle').value)
+        self.servo_left_angle = float(self.get_parameter('servo_left_angle').value)
+        self.servo_right_angle = float(self.get_parameter('servo_right_angle').value)
+        self.last_servo_angle_deg = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
         
@@ -91,14 +99,14 @@ class AutonomousDrive(Node):
             # Publisher cho ảnh camera đã vẽ lane detection
             self.image_debug_pub = self.create_publisher(Image, '/camera/image_debug', 10)
         
-        # Publisher
+        # Publisher lệnh vận tốc tới Arduino (linear, angular)
         self.cmd_vel_pub = self.create_publisher(
             Twist,
             '/cmd_vel',
             10
         )
-        # Publisher debug góc servo mong muốn (ước tính từ lệnh quay)
-        self.servo_angle_pub = self.create_publisher(Float32, '/servo_desired_angle', 10)
+        # Publisher lệnh górc servo trực tiếp (đơn vị độ) tới Arduino qua arduino_bridge
+        self.servo_angle_pub = self.create_publisher(Float32, '/servo_angle_cmd', 10)
         
         # State variables
         self.latest_scan = None
@@ -491,48 +499,29 @@ class AutonomousDrive(Node):
             # KHÔNG có vật cản (hoặc đã tắt LiDAR) - ƯU TIÊN: Camera để đi đúng làn đường
             if self.use_camera and self.lane_detected:
                 # Điều chỉnh để đi giữa đường dựa trên camera (lane following)
-                cmd.linear.x = self.max_linear_speed
-
-                # Điều chỉnh góc quay dựa trên offset từ giữa đường (Ackermann steering)
-                # Thay vì PID liên tục, dùng điều khiển kiểu "bật công tắc":
-                # - Nếu lệch nhỏ hơn dead_zone -> đi thẳng (angular = 0)
-                # - Nếu lệch đủ lớn -> gửi angular cố định (±turn_command_angular)
+                # Điều khiển kiểu "bật công tắc" bằng góc servo trực tiếp:
+                # - Nếu lệch nhỏ hơn dead_zone -> servo về giữa (servo_center_angle), chạy thẳng
+                # - Nếu lệch đủ lớn -> servo quay hẳn sang trái/phải (servo_left/right_angle), chạy chậm lại
                 error = float(self.smoothed_lane_offset)
 
                 if abs(error) < self.lane_dead_zone:
-                    desired_angular = 0.0
+                    target_angle = self.servo_center_angle
+                    cmd.linear.x = self.max_linear_speed
                 else:
-                    direction = 1.0 if error > 0.0 else -1.0
-                    desired_angular = direction * self.turn_command_angular
-
-                # Giới hạn angular velocity theo max_steer_angle của Ackermann
-                max_angular_for_ackermann = self.max_angular_speed * 0.9  # 90% để an toàn
-                cmd.angular.z = max(-max_angular_for_ackermann,
-                                   min(max_angular_for_ackermann, desired_angular))
-
-                # Ước tính góc servo tương ứng (để debug / quan sát)
-                try:
-                    WHEELBASE = 0.4
-                    MAX_STEER_ANGLE = 0.5236  # ~30 độ
-                    SERVO_CENTER = 100.0
-                    SERVO_RANGE = 45.0
-
-                    v_mag = max(0.01, abs(cmd.linear.x))
-                    effective_angular = cmd.angular.z
-                    steer_angle = math.atan(WHEELBASE * effective_angular / v_mag)
-                    steer_angle = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer_angle))
-
-                    normalized = steer_angle / MAX_STEER_ANGLE  # -1..1
-                    servo_angle_deg = SERVO_CENTER + normalized * SERVO_RANGE
-                    self.servo_angle_pub.publish(Float32(data=float(servo_angle_deg)))
-                except Exception:
-                    pass
-
-                # Giảm tốc độ khi đang vào cua (đang đánh lái)
-                if abs(cmd.angular.z) > 0.01:
-                    # cornering_speed_factor trong khoảng (0.0 - 1.0)
-                    # Ví dụ: 0.6 = chạy 60% tốc độ khi vào cua
+                    if error > 0.0:
+                        # lệch sang phải -> quay phải
+                        target_angle = self.servo_right_angle
+                    else:
+                        # lệch sang trái -> quay trái
+                        target_angle = self.servo_left_angle
                     cmd.linear.x = self.max_linear_speed * self.cornering_speed_factor
+
+                # Không dùng angular.z để quay servo nữa, để Arduino chỉ nhận góc qua S:angle
+                cmd.angular.z = 0.0
+
+                # Gửi góc servo mong muốn (degree) cho Arduino bridge
+                self.last_servo_angle_deg = float(target_angle)
+                self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
 
                 # Log định kỳ về lane detection (mỗi 2 giây)
                 current_time = self.get_clock().now().seconds_nanoseconds()[0]
@@ -540,7 +529,7 @@ class AutonomousDrive(Node):
                     self.get_logger().info(
                         f'📷 Lane - Raw: {self.lane_center_offset:.2f}, '
                         f'Smooth: {self.smoothed_lane_offset:.2f}, '
-                        f'Angular: {cmd.angular.z:.2f} rad/s'
+                        f'ServoCmd: {self.last_servo_angle_deg:.1f} deg'
                     )
                     self.last_lane_log_time = current_time
             else:

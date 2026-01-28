@@ -9,10 +9,12 @@ Node này:
 """
 
 import rclpy
+from rclpy import logging
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, Quaternion
+from geometry_msgs import msg as geom_msg
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import serial
@@ -80,14 +82,23 @@ class ArduinoBridge(Node):
             self.get_logger().error(f'Đảm bảo Arduino đã được kết nối và port đúng: {serial_port}')
             sys.exit(1)
         
-        # Subscriber cho cmd_vel
+        # Subscriber cho cmd_vel (điều khiển vận tốc)
         self.cmd_vel_sub = self.create_subscription(
-            Twist,
+            geom_msg.Twist,
             '/cmd_vel',
             self.cmd_vel_callback,
             10
         )
         self.get_logger().info('Đã subscribe topic /cmd_vel')
+
+        # Subscriber cho lệnh góc servo trực tiếp (S:angle)
+        self.servo_cmd_sub = self.create_subscription(
+            Float32,
+            '/servo_angle_cmd',
+            self.servo_cmd_callback,
+            10
+        )
+        self.get_logger().info('Đã subscribe topic /servo_angle_cmd')
         
         # Parameters cho odometry
         self.odom_frame_id = self.get_parameter('odom_frame_id').value
@@ -189,7 +200,7 @@ class ArduinoBridge(Node):
         except Exception as e:
             self.get_logger().warn(f'Không thể gửi config tới Arduino: {str(e)}')
 
-    def cmd_vel_callback(self, msg):
+    def cmd_vel_callback(self, msg: geom_msg.Twist):
         """Callback xử lý lệnh cmd_vel từ ROS2"""
         linear = msg.linear.x
         angular = msg.angular.z
@@ -203,7 +214,7 @@ class ArduinoBridge(Node):
         # Gửi lệnh tới Arduino
         self.send_command(linear, angular)
     
-    def send_command(self, linear, angular):
+    def send_command(self, linear: float, angular: float):
         """Gửi lệnh tới Arduino qua Serial"""
         if self.serial_conn is None or not self.serial_conn.is_open:
             return
@@ -348,6 +359,27 @@ class ArduinoBridge(Node):
         t.transform.rotation = q
         
         self.tf_broadcaster.sendTransform(t)
+
+    def send_servo_angle(self, angle_deg: float):
+        """Gửi lệnh góc servo trực tiếp tới Arduino (S:angle)"""
+        if self.serial_conn is None or not self.serial_conn.is_open:
+            return
+        try:
+            angle_int = int(round(angle_deg))
+            if angle_int < 0:
+                angle_int = 0
+            if angle_int > 180:
+                angle_int = 180
+            command = f"S:{angle_int}\n"
+            self.serial_conn.write(command.encode('utf-8'))
+            self.serial_conn.flush()
+            # self.get_logger().debug(f'Sent servo cmd: {command.strip()}')
+        except serial.SerialException as e:
+            self.get_logger().warn(f'Lỗi Serial khi gửi S:angle: {e}')
+
+    def servo_cmd_callback(self, msg: Float32):
+        """Nhận lệnh góc servo từ topic /servo_angle_cmd và gửi S:angle tới Arduino"""
+        self.send_servo_angle(msg.data)
         
         # Cập nhật thời gian
         self.last_odom_time = current_time

@@ -75,8 +75,8 @@ const float TURN_SPEED_MPS       = 0.20f;  // tốc độ khi rẽ (m/s)
 const float STRAIGHT_SPEED_MPS   = 0.20f;  // tốc độ sau khi rẽ xong
 const float TURN_TRIGGER_ANGULAR = 0.30f;  // |angular| lớn hơn ngưỡng này sẽ kích hoạt chế độ rẽ
 
-const int TURN_SERVO_RIGHT_ANGLE = 130;    // góc servo khi rẽ phải
-const int TURN_SERVO_LEFT_ANGLE  = 70;     // góc servo khi rẽ trái
+const int TURN_SERVO_RIGHT_ANGLE = 155;    // góc servo khi rẽ phải (xa hơn)
+const int TURN_SERVO_LEFT_ANGLE  = 45;     // góc servo khi rẽ trái (xa hơn)
 
 // ==================== SETUP ====================
 void setup() {
