@@ -24,23 +24,38 @@ class CameraNode(Node):
         self.declare_parameter('frame_id', 'camera_link_optical')
 
         video_device = self.get_parameter('video_device').value
-        width = self.get_parameter('width').value
-        height = self.get_parameter('height').value
-        fps = self.get_parameter('fps').value
+        width = int(self.get_parameter('width').value)  # Convert to int (LaunchConfig returns string)
+        height = int(self.get_parameter('height').value)
+        fps = int(self.get_parameter('fps').value)
         self.frame_id = self.get_parameter('frame_id').value
 
-        # Khởi tạo camera
-        self.cap = cv2.VideoCapture(video_device)
+        self.get_logger().info(f'Dang mo camera {video_device} voi width={width}, height={height}, fps={fps}')
+
+        # Khởi tạo camera với V4L2 backend (ưu tiên)
+        self.cap = cv2.VideoCapture(video_device, cv2.CAP_V4L2)
+        if not self.cap.isOpened():
+            self.get_logger().warn('V4L2 backend khong hoat dong, thu backend mac dinh...')
+            self.cap = cv2.VideoCapture(video_device)
+
         if not self.cap.isOpened():
             self.get_logger().error(f'Không thể mở camera tại {video_device}')
             sys.exit(1)
 
         # Cấu hình camera
+        # Set buffer size nhỏ để giảm latency
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        # Set FOURCC codec (MJPG thường nhanh hơn)
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+
         if width > 0 and height > 0:
             # Set resolution theo tham số
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        # Nếu width=0 hoặc height=0, dùng resolution mặc định của camera (thường là full)
+        else:
+            # Set resolution cao (camera sẽ tự chọn resolution hỗ trợ cao nhất)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
         self.cap.set(cv2.CAP_PROP_FPS, fps)
 
