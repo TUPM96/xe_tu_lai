@@ -556,11 +556,11 @@ class AutonomousDrive(Node):
                         if raw_error > 0.0:
                             # Lệch sang phải -> rẽ trái để về giữa
                             self.turn_direction = -1
-                            self.turn_servo_angle = self.servo_left_angle
+                            self.turn_servo_angle = self.servo_right_angle  # Đổi: dùng right_angle cho rẽ trái
                         else:
                             # Lệch sang trái -> rẽ phải để về giữa
                             self.turn_direction = 1
-                            self.turn_servo_angle = self.servo_right_angle
+                            self.turn_servo_angle = self.servo_left_angle  # Đổi: dùng left_angle cho rẽ phải
 
                         self.get_logger().info(
                             f'🚗 Bắt đầu rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
