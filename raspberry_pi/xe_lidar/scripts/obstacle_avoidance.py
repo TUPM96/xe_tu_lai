@@ -14,6 +14,15 @@ import cv2
 import numpy as np
 import math
 from std_msgs.msg import Float32
+from enum import Enum
+
+
+class ObstacleAvoidanceState(Enum):
+    """Trạng thái tránh vật cản"""
+    NORMAL = 0          # Đi bình thường
+    AVOIDING_LEFT = 1  # Đang tránh vật cản bằng cách rẽ trái (45°)
+    AVOIDING_RIGHT = 2 # Đang tránh vật cản bằng cách rẽ phải (155°)
+    RETURNING = 3      # Đang quay về đi thẳng sau khi tránh vật cản
 
 
 class AutonomousDrive(Node):
@@ -88,6 +97,16 @@ class AutonomousDrive(Node):
         # Servo angle smoothing
         self.last_servo_angle_deg = self.servo_center_angle  # Khởi tạo ở góc giữa
         self.smoothed_servo_angle_deg = self.servo_center_angle
+        
+        # State machine cho tránh vật cản
+        self.obstacle_avoidance_state = ObstacleAvoidanceState.NORMAL
+        self.obstacle_clear_count = 0  # Đếm số lần không phát hiện vật cản
+        self.obstacle_clear_threshold = 10  # Sau 10 lần không có vật cản thì quay về
+        
+        # State machine cho tránh vật cản
+        self.obstacle_avoidance_state = ObstacleAvoidanceState.NORMAL
+        self.obstacle_clear_count = 0  # Đếm số lần không phát hiện vật cản
+        self.obstacle_clear_threshold = 10  # Sau 10 lần không có vật cản thì quay về
         
         # Subscribers
         if self.use_lidar:
@@ -629,38 +648,100 @@ class AutonomousDrive(Node):
                 self.get_logger().info('Da nhan duoc du lieu LiDAR, chuyen sang che do tu dong!')
         
         # UU TIEN PHU: Kiem tra vat can bang LiDAR (chi khi co vat can moi can thiep)
-        if self.use_lidar and self.obstacle_detected:
-            # Co vat can, thuc hien tranh bang cach dieu khien goc servo
-            if self.obstacle_direction == 0:
-                # Vat can o giua hoac ca hai ben, lui lai va quay phai
-                cmd.linear.x = -self.max_linear_speed * 0.5
-                cmd.angular.z = 0.0
-                # Rẽ phải để tránh (tăng góc servo)
-                avoid_servo_angle = self.servo_center_angle + 30.0  # Rẽ phải 30 độ
-                self.smoothed_servo_angle_deg = avoid_servo_angle
-                self.last_servo_angle_deg = avoid_servo_angle
-                self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
-                self.get_logger().info('⚠️ Vat can phia truoc - Lui lai va quay phai')
-            elif self.obstacle_direction < 0:
-                # Vat can ben trai -> ne ben phai (tang goc servo) roi di thang
-                cmd.linear.x = self.max_linear_speed * 0.6
-                cmd.angular.z = 0.0
-                # Rẽ phải để tránh (tăng góc servo)
-                avoid_servo_angle = self.servo_center_angle + 30.0  # Rẽ phải 30 độ
-                self.smoothed_servo_angle_deg = avoid_servo_angle
-                self.last_servo_angle_deg = avoid_servo_angle
-                self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
-                self.get_logger().info('⚠️ Vat can ben trai - Re phai de tranh')
+        if self.use_lidar:
+            if self.obstacle_detected:
+                # Co vat can - kich hoat che do tranh vat can
+                self.obstacle_clear_count = 0
+                
+                if self.obstacle_avoidance_state == ObstacleAvoidanceState.NORMAL:
+                    # Bắt đầu tránh vật cản
+                    if self.obstacle_direction < 0:
+                        # Vat can ben trai -> re phai (155 do)
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_RIGHT
+                        avoid_servo_angle = 155.0
+                        self.get_logger().info('⚠️ Vat can ben trai - Re phai 155° de tranh')
+                    elif self.obstacle_direction > 0:
+                        # Vat can ben phai -> re trai (45 do)
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_LEFT
+                        avoid_servo_angle = 45.0
+                        self.get_logger().info('⚠️ Vat can ben phai - Re trai 45° de tranh')
+                    else:
+                        # Vat can o giua -> lui lai va re phai
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_RIGHT
+                        avoid_servo_angle = 155.0
+                        cmd.linear.x = -self.max_linear_speed * 0.5
+                        self.get_logger().info('⚠️ Vat can phia truoc - Lui lai va re phai 155°')
+                    
+                    self.smoothed_servo_angle_deg = avoid_servo_angle
+                    self.last_servo_angle_deg = avoid_servo_angle
+                    self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                    if cmd.linear.x == 0.0:
+                        cmd.linear.x = self.max_linear_speed * 0.6
+                    cmd.angular.z = 0.0
+                elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_LEFT:
+                    # Dang tranh bang cach re trai (45 do) - tiep tuc giu goc
+                    cmd.linear.x = self.max_linear_speed * 0.6
+                    cmd.angular.z = 0.0
+                    self.smoothed_servo_angle_deg = 45.0
+                    self.last_servo_angle_deg = 45.0
+                    self.servo_angle_pub.publish(Float32(data=45.0))
+                elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_RIGHT:
+                    # Dang tranh bang cach re phai (155 do) - tiep tuc giu goc
+                    cmd.linear.x = self.max_linear_speed * 0.6
+                    cmd.angular.z = 0.0
+                    self.smoothed_servo_angle_deg = 155.0
+                    self.last_servo_angle_deg = 155.0
+                    self.servo_angle_pub.publish(Float32(data=155.0))
+                elif self.obstacle_avoidance_state == ObstacleAvoidanceState.RETURNING:
+                    # Dang quay ve di thang - tiep tuc giu goc giua
+                    cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
+                    cmd.angular.z = 0.0
+                    self.smoothed_servo_angle_deg = self.servo_center_angle
+                    self.last_servo_angle_deg = self.servo_center_angle
+                    self.servo_angle_pub.publish(Float32(data=self.servo_center_angle))
             else:
-                # Vat can ben phai -> re trai (giam goc servo) roi di tiep
-                cmd.linear.x = self.max_linear_speed * 0.6
-                cmd.angular.z = 0.0
-                # Rẽ trái để tránh (giảm góc servo)
-                avoid_servo_angle = self.servo_center_angle - 30.0  # Rẽ trái 30 độ
-                self.smoothed_servo_angle_deg = avoid_servo_angle
-                self.last_servo_angle_deg = avoid_servo_angle
-                self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
-                self.get_logger().info('⚠️ Vat can ben phai - Re trai de tranh')
+                # Khong co vat can
+                if self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_LEFT:
+                    # Da qua vat can ben phai -> quay ve di thang (re phai lai)
+                    self.obstacle_clear_count += 1
+                    if self.obstacle_clear_count >= self.obstacle_clear_threshold:
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.RETURNING
+                        self.get_logger().info('✅ Da qua vat can - Quay ve di thang (re phai lai)')
+                        self.obstacle_clear_count = 0
+                    # Tiep tuc giu goc 45 do cho den khi chuyen sang RETURNING
+                    cmd.linear.x = self.max_linear_speed * 0.6
+                    cmd.angular.z = 0.0
+                    self.smoothed_servo_angle_deg = 45.0
+                    self.last_servo_angle_deg = 45.0
+                    self.servo_angle_pub.publish(Float32(data=45.0))
+                elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_RIGHT:
+                    # Da qua vat can ben trai -> quay ve di thang (re trai lai)
+                    self.obstacle_clear_count += 1
+                    if self.obstacle_clear_count >= self.obstacle_clear_threshold:
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.RETURNING
+                        self.get_logger().info('✅ Da qua vat can - Quay ve di thang (re trai lai)')
+                        self.obstacle_clear_count = 0
+                    # Tiep tuc giu goc 155 do cho den khi chuyen sang RETURNING
+                    cmd.linear.x = self.max_linear_speed * 0.6
+                    cmd.angular.z = 0.0
+                    self.smoothed_servo_angle_deg = 155.0
+                    self.last_servo_angle_deg = 155.0
+                    self.servo_angle_pub.publish(Float32(data=155.0))
+                elif self.obstacle_avoidance_state == ObstacleAvoidanceState.RETURNING:
+                    # Dang quay ve di thang - tiep tuc di thang
+                    self.obstacle_clear_count += 1
+                    if self.obstacle_clear_count >= self.obstacle_clear_threshold:
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.NORMAL
+                        self.get_logger().info('✅ Da quay ve di thang - Che do binh thuong')
+                        self.obstacle_clear_count = 0
+                    cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
+                    cmd.angular.z = 0.0
+                    self.smoothed_servo_angle_deg = self.servo_center_angle
+                    self.last_servo_angle_deg = self.servo_center_angle
+                    self.servo_angle_pub.publish(Float32(data=self.servo_center_angle))
+                else:
+                    # NORMAL state - xu ly binh thuong
+                    pass  # Tiep tuc xu ly camera hoac di thang
         else:
             # KHÔNG có vật cản (hoặc đã tắt LiDAR) - Sử dụng PID để điều khiển góc servo
             if not self.use_camera:
