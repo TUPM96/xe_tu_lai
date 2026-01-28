@@ -395,8 +395,10 @@ class AutonomousDrive(Node):
                 arrow_x = int(center_x)
                 arrow_y = int(height * 0.75)  # Vi tri o 75% chieu cao
 
-                # Tinh do lech de ve mui ten (scale offset) - dung smoothed
-                offset_pixels = int(self.smoothed_lane_offset * width * 0.4)  # Scale offset
+                # Tinh do lech de ve mui ten (scale offset) - su dung huong STEERING that
+                # Da dao dau trong vong dieu khien, nen o day cung dung gia tri dao
+                steering_offset = -self.smoothed_lane_offset
+                offset_pixels = int(steering_offset * width * 0.4)  # Scale offset
                 arrow_end_x = arrow_x + offset_pixels
                 arrow_end_y = arrow_y - 60  # Mui ten huong len tren
 
@@ -407,15 +409,15 @@ class AutonomousDrive(Node):
                                    (arrow_end_x, arrow_end_y),
                                    (0, 255, 255), 5, tipLength=0.3)
 
-                # Text huong di - dung smoothed offset
-                if abs(self.smoothed_lane_offset) < self.lane_dead_zone:
+                # Text huong di - dung steering_offset (cung chieu voi huong quay that)
+                if abs(steering_offset) < self.lane_dead_zone:
                     direction_text = "Di thang"
                     direction_color = (0, 255, 0)  # Xanh la
-                elif self.smoothed_lane_offset > 0:
-                    direction_text = f"Re trai ({abs(self.smoothed_lane_offset):.2f})"
+                elif steering_offset > 0:
+                    direction_text = f"Re trai ({abs(steering_offset):.2f})"
                     direction_color = (255, 165, 0)  # Mau cam
                 else:
-                    direction_text = f"Re phai ({abs(self.smoothed_lane_offset):.2f})"
+                    direction_text = f"Re phai ({abs(steering_offset):.2f})"
                     direction_color = (255, 165, 0)  # Mau cam
                 
                 cv2.putText(image_with_lanes, direction_text, (10, 90), 
@@ -510,7 +512,9 @@ class AutonomousDrive(Node):
                 self.lane_error_prev = error
 
                 # Tính angular theo PID: angular = Kp*e + Ki*∫e dt + Kd*de/dt
-                desired_angular = (
+                # Lưu ý: nếu xe đang rẽ NGƯỢC hướng mong muốn trên thực tế,
+                # việc đảo dấu ở đây sẽ đảo chiều đánh lái.
+                desired_angular = -(
                     self.kp * error +
                     self.ki * self.lane_error_integral +
                     self.kd * derivative
