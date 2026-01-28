@@ -142,7 +142,7 @@ def generate_launch_description():
             'use_sim_time': False,
             'min_distance': 0.5,
             'safe_distance': 0.8,
-            'max_linear_speed': 0.27,  # giam ~10% so voi 0.3 de xe di cham hon
+            'max_linear_speed': 0.24,  # giam ~20% so voi 0.3 de xe di cham hon
             'max_angular_speed': 1.0,
             'front_angle_range': 60,
             'use_camera': True,

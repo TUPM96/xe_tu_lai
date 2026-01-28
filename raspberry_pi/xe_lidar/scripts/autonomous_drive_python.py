@@ -209,7 +209,7 @@ class AutonomousDrive:
     """Class xử lý logic tự lái (giống như ROS2 node)"""
     
     def __init__(self, min_distance=0.5, safe_distance=0.8,
-                 max_linear_speed=0.3, max_angular_speed=1.0,
+                 max_linear_speed=0.24, max_angular_speed=1.0,
                  front_angle_range=60, use_camera=True):
         self.min_distance = min_distance
         self.safe_distance = safe_distance

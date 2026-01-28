@@ -167,50 +167,57 @@ class LaneDetectionNode(Node):
             # Phat hien canh bang Canny
             edges = cv2.Canny(blurred, 50, 150)
 
-            # ==== Thay vi HoughLinesP, dung projection theo cot de tim 2 vach ====
+            # ==== Cách đơn giản & phổ biến: quét từng hàng từ giữa ra 2 bên ====
+            # Dùng black_mask (vạch đen -> trắng sau threshold) để tìm 2 vạch đen 2 bên
             center_x = width / 2
-            # Gioi han vung tim kiem ben trai/phai de bo vung giua
-            left_x_min = int(width * 0.05)
-            left_x_max = int(width * 0.45)
-            right_x_min = int(width * 0.55)
-            right_x_max = int(width * 0.95)
+            roi_height = roi_bottom - roi_top
 
-            # Tong gradient theo cot (projection doc)
-            column_sum = np.sum(edges, axis=0)  # size = width
+            left_positions = []
+            right_positions = []
 
-            left_x = None
-            right_x = None
+            # Quét từ dưới lên khoảng 1/3 chiều cao ROI, bước 3px để giảm nhiễu
+            y_start = roi_height - 1
+            y_end = max(0, roi_height - int(roi_height / 3))
 
-            # Tim dinh maxima trong vung trai
-            if left_x_max > left_x_min:
-                left_region = column_sum[left_x_min:left_x_max]
-                if np.max(left_region) > 0:
-                    left_x = left_x_min + int(np.argmax(left_region))
+            for y in range(y_start, y_end, -3):
+                row = black_mask[y, :]  # y đã là tọa độ trong ROI
 
-            # Tim dinh maxima trong vung phai
-            if right_x_max > right_x_min:
-                right_region = column_sum[right_x_min:right_x_max]
-                if np.max(right_region) > 0:
-                    right_x = right_x_min + int(np.argmax(right_region))
+                # Tìm vạch bên trái: quét từ center_x ra trái
+                left_x = None
+                for x in range(int(center_x), 0, -1):
+                    if row[x] > 0:  # pixel trắng = vạch đen sau threshold
+                        left_x = x
+                        break
+
+                # Tìm vạch bên phải: quét từ center_x ra phải
+                right_x = None
+                for x in range(int(center_x), width):
+                    if row[x] > 0:
+                        right_x = x
+                        break
+
+                if left_x is not None:
+                    left_positions.append(left_x)
+                if right_x is not None:
+                    right_positions.append(right_x)
 
             left_x_points = []
             right_x_points = []
 
-            if left_x is not None:
-                left_x_points.append(left_x)
-            if right_x is not None:
-                right_x_points.append(right_x)
-
-            # Ve 2 vach phat hien duoc (ke tu duoi len tren)
-            if left_x is not None:
+            if len(left_positions) > 0:
+                left_x_med = int(np.median(left_positions))
+                left_x_points.append(left_x_med)
                 cv2.line(image_with_lanes,
-                         (left_x, roi_bottom),
-                         (left_x, roi_top),
+                         (left_x_med, roi_bottom),
+                         (left_x_med, roi_top),
                          (255, 0, 0), 3)
-            if right_x is not None:
+
+            if len(right_positions) > 0:
+                right_x_med = int(np.median(right_positions))
+                right_x_points.append(right_x_med)
                 cv2.line(image_with_lanes,
-                         (right_x, roi_bottom),
-                         (right_x, roi_top),
+                         (right_x_med, roi_bottom),
+                         (right_x_med, roi_top),
                          (0, 0, 255), 3)
 
             # Tinh offset tu giua duong
