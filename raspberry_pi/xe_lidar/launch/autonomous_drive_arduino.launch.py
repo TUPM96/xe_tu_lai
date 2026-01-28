@@ -102,8 +102,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'video_device': LaunchConfiguration('video_device'),
-            'width': 640,
-            'height': 480,
+            'width': 1280,
+            'height': 720,
             'fps': 30,
             'frame_id': 'camera_link_optical'
         }]

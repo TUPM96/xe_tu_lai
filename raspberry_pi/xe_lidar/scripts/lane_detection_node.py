@@ -22,7 +22,7 @@ class LaneDetectionNode(Node):
         self.declare_parameter('camera_topic', '/camera/image_raw')
         self.declare_parameter('debug_camera', True)
         self.declare_parameter('roi_top_percent', 0.4)  # ROI bat dau tu % chieu cao
-        self.declare_parameter('lane_width_pixels', 200)  # Khoang cach uoc tinh giua 2 vach (pixels)
+        self.declare_parameter('lane_width_pixels', 400)  # Khoang cach uoc tinh giua 2 vach (pixels) - HD 1280x720
         self.declare_parameter('use_full_image', False)  # Dung full anh (khong crop ROI)
 
         self.camera_topic = self.get_parameter('camera_topic').value

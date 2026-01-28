@@ -9,7 +9,7 @@ import sys
 import argparse
 
 
-def test_camera(device=0, width=640, height=480):
+def test_camera(device=0, width=1280, height=720):
     """
     Test camera với OpenCV
     
@@ -92,10 +92,10 @@ def main():
     parser = argparse.ArgumentParser(description='Test Camera trên Raspberry Pi')
     parser.add_argument('--device', type=int, default=0,
                        help='Device ID của camera (mặc định: 0)')
-    parser.add_argument('--width', type=int, default=640,
-                       help='Chiều rộng ảnh (mặc định: 640)')
-    parser.add_argument('--height', type=int, default=480,
-                       help='Chiều cao ảnh (mặc định: 480)')
+    parser.add_argument('--width', type=int, default=1280,
+                       help='Chiều rộng ảnh (mặc định: 1280)')
+    parser.add_argument('--height', type=int, default=720,
+                       help='Chiều cao ảnh (mặc định: 720)')
     
     args = parser.parse_args()
     
