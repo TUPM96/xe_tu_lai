@@ -13,8 +13,8 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description='Khoi dong Camera')
     parser.add_argument('--device', default='/dev/video0', help='Video device')
-    parser.add_argument('--width', type=int, default=1280, help='Chieu rong anh (default: 1280)')
-    parser.add_argument('--height', type=int, default=720, help='Chieu cao anh (default: 720)')
+    parser.add_argument('--width', type=int, default=1920, help='Chieu rong anh (default: 1920)')
+    parser.add_argument('--height', type=int, default=1080, help='Chieu cao anh (default: 1080)')
     parser.add_argument('--fps', type=int, default=30, help='Frame per second')
     args = parser.parse_args()
 

@@ -10,17 +10,16 @@ from sensor_msgs.msg import Image, CameraInfo
 import cv2
 import numpy as np
 import sys
-import time
 
 
 class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
-        # Parameters - Mặc định 1280x720 (HD)
+        # Parameters - Mặc định 1920x1080 (Full HD)
         self.declare_parameter('video_device', '/dev/video0')
-        self.declare_parameter('width', 1280)  # Mặc định HD
-        self.declare_parameter('height', 720)  # Mặc định HD
+        self.declare_parameter('width', 1920)
+        self.declare_parameter('height', 1080)
         self.declare_parameter('fps', 30)
         self.declare_parameter('frame_id', 'camera_link_optical')
 
@@ -32,52 +31,24 @@ class CameraNode(Node):
 
         self.get_logger().info(f'Dang mo camera {video_device} voi width={width}, height={height}, fps={fps}')
 
-        # Khởi tạo camera với V4L2 backend
-        self.cap = cv2.VideoCapture(video_device, cv2.CAP_V4L2)
-        if not self.cap.isOpened():
-            self.get_logger().warn('V4L2 backend khong hoat dong, thu backend mac dinh...')
-            self.cap = cv2.VideoCapture(video_device)
+        # Khởi tạo camera - dùng OpenCV mặc định (không ép V4L2)
+        self.cap = cv2.VideoCapture(video_device)
 
         if not self.cap.isOpened():
             self.get_logger().error(f'Không thể mở camera tại {video_device}')
             sys.exit(1)
 
-        # QUAN TRỌNG: Set FOURCC MJPG TRƯỚC KHI set resolution
-        # MJPG cho phép resolution cao với fps cao
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-
-        # Set resolution
+        # Set resolution và fps
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
-
-        # Set buffer size = 2 để tránh timeout nhưng vẫn giảm latency
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
-
-        # Đợi camera ổn định sau khi set resolution
-        time.sleep(0.5)
 
         # Lấy resolution thực tế từ camera
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
 
-        self.get_logger().info(f'Camera đã mở tại {video_device} ({actual_width}x{actual_height} @ {actual_fps}fps)')
-
-        # Warmup: Đọc và bỏ một số frame đầu để camera ổn định
-        self.get_logger().info('Camera warmup - dang doc frames de on dinh...')
-        warmup_success = 0
-        for i in range(10):
-            ret, _ = self.cap.read()
-            if ret:
-                warmup_success += 1
-            time.sleep(0.1)
-
-        if warmup_success == 0:
-            self.get_logger().error('Camera khong doc duoc frame nao trong warmup!')
-            sys.exit(1)
-        else:
-            self.get_logger().info(f'Warmup hoan tat: {warmup_success}/10 frames OK')
+        self.get_logger().info(f'Camera da mo tai {video_device} ({actual_width}x{actual_height} @ {actual_fps}fps)')
         
         # Publishers
         self.image_publisher = self.create_publisher(Image, '/camera/image_raw', 10)
@@ -155,16 +126,8 @@ class CameraNode(Node):
         return camera_info
     
     def timer_callback(self):
-        # Thử đọc frame với retry
-        ret = False
-        frame = None
-        for attempt in range(3):
-            ret, frame = self.cap.read()
-            if ret:
-                break
-            time.sleep(0.01)  # Đợi 10ms rồi thử lại
-
-        if ret and frame is not None:
+        ret, frame = self.cap.read()
+        if ret:
             try:
                 # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
                 ros_image = self.cv2_to_imgmsg(frame, "bgr8")
@@ -178,16 +141,8 @@ class CameraNode(Node):
                 # Publish camera_info (đồng bộ với image)
                 self.camera_info.header.stamp = current_time
                 self.camera_info_publisher.publish(self.camera_info)
-
-                # Reset error count khi thành công
-                self.consecutive_errors = 0
             except Exception as e:
-                self.get_logger().error(f'Lỗi convert ảnh: {str(e)}')
-        else:
-            self.consecutive_errors = getattr(self, 'consecutive_errors', 0) + 1
-            # Chỉ log mỗi 10 lỗi liên tiếp để tránh spam
-            if self.consecutive_errors % 10 == 1:
-                self.get_logger().warn(f'Khong doc duoc frame tu camera (lan thu {self.consecutive_errors})')
+                self.get_logger().error(f'Loi convert anh: {str(e)}')
     
     def destroy_node(self):
         if self.cap:
