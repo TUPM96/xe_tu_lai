@@ -406,7 +406,9 @@ class AutonomousDrive(Node):
                                    (0, 255, 255), 5, tipLength=0.3)
 
                 # Text huong di - dung steering_offset (cung chieu voi huong quay that)
-                if abs(steering_offset) < self.lane_dead_zone:
+                # Ở đây KHÔNG dùng lane_dead_zone, chỉ dùng ngưỡng rất nhỏ để hiển thị "Đi thẳng",
+                # để overlay luôn cho thấy đang thiên trái/phải dù servo có thể chưa đánh lái vì dead zone.
+                if abs(steering_offset) < 0.02:
                     direction_text = "Di thang"
                     direction_color = (0, 255, 0)  # Xanh la
                 elif steering_offset > 0:
