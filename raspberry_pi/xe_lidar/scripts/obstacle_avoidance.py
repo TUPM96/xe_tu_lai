@@ -570,13 +570,13 @@ class AutonomousDrive(Node):
                         self.turn_start_time = current_time
 
                         if raw_error > 0.0:
-                            # Lệch sang phải -> rẽ phải
-                            self.turn_direction = 1
-                            self.turn_servo_angle = self.servo_right_angle
-                        else:
-                            # Lệch sang trái -> rẽ trái
+                            # Lệch sang phải -> rẽ trái để về giữa
                             self.turn_direction = -1
                             self.turn_servo_angle = self.servo_left_angle
+                        else:
+                            # Lệch sang trái -> rẽ phải để về giữa
+                            self.turn_direction = 1
+                            self.turn_servo_angle = self.servo_right_angle
 
                         self.get_logger().info(
                             f'🚗 Bắt đầu rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
