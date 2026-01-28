@@ -14,6 +14,13 @@ import cv2
 import numpy as np
 import math
 from std_msgs.msg import Float32
+from enum import Enum
+
+
+class TurnState(Enum):
+    """Trạng thái của state machine cho việc rẽ"""
+    IDLE = 0        # Đang chạy thẳng, sẵn sàng nhận lệnh rẽ mới
+    TURNING = 1     # Đang thực hiện rẽ, bỏ qua lane detection cho đến khi hoàn thành
 
 
 class AutonomousDrive(Node):
@@ -49,6 +56,11 @@ class AutonomousDrive(Node):
         self.declare_parameter('servo_left_angle', 45.0)
         self.declare_parameter('servo_right_angle', 155.0)
 
+        # Tham số state machine cho việc rẽ (hard-coded turn)
+        self.declare_parameter('turn_distance', 0.5)        # Khoảng cách rẽ (m) - chạy 50cm rồi mới xét tiếp
+        self.declare_parameter('turn_speed', 0.2)           # Tốc độ khi rẽ (m/s)
+        self.declare_parameter('turn_trigger_threshold', 0.3)  # Ngưỡng offset để kích hoạt rẽ (0.0-1.0)
+
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
         self.max_linear_speed = self.get_parameter('max_linear_speed').value
@@ -68,9 +80,19 @@ class AutonomousDrive(Node):
         self.servo_center_angle = float(self.get_parameter('servo_center_angle').value)
         self.servo_left_angle = float(self.get_parameter('servo_left_angle').value)
         self.servo_right_angle = float(self.get_parameter('servo_right_angle').value)
+        self.turn_distance = float(self.get_parameter('turn_distance').value)
+        self.turn_speed = float(self.get_parameter('turn_speed').value)
+        self.turn_trigger_threshold = float(self.get_parameter('turn_trigger_threshold').value)
         self.last_servo_angle_deg = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
+
+        # State machine cho việc rẽ
+        self.turn_state = TurnState.IDLE
+        self.turn_start_time = 0.0
+        self.turn_duration = self.turn_distance / self.turn_speed  # Thời gian rẽ = quãng đường / tốc độ
+        self.turn_direction = 0  # -1: trái, 0: thẳng, 1: phải
+        self.turn_servo_angle = self.servo_center_angle  # Góc servo hiện tại khi rẽ
         
         # Subscribers
         if self.use_lidar:
@@ -496,52 +518,109 @@ class AutonomousDrive(Node):
                 cmd.angular.z = self.max_angular_speed * 0.7
                 self.get_logger().info('⚠️ Vat can ben phai - Quay trai de tranh')
         else:
-            # KHÔNG có vật cản (hoặc đã tắt LiDAR) - ƯU TIÊN: Camera để đi đúng làn đường
-            if self.use_camera and self.lane_detected:
-                # Điều chỉnh để đi giữa đường dựa trên camera (lane following)
-                # Điều khiển kiểu "bật công tắc" bằng góc servo trực tiếp:
-                # - Nếu lệch nhỏ hơn dead_zone -> servo về giữa (servo_center_angle), chạy thẳng
-                # - Nếu lệch đủ lớn -> servo quay hẳn sang trái/phải (servo_left/right_angle), chạy chậm lại
-                error = float(self.smoothed_lane_offset)
+            # KHÔNG có vật cản (hoặc đã tắt LiDAR) - Sử dụng STATE MACHINE để điều khiển rẽ
+            current_time = self.get_clock().now().seconds_nanoseconds()[0] + \
+                           self.get_clock().now().seconds_nanoseconds()[1] / 1e9
 
-                if abs(error) < self.lane_dead_zone:
-                    target_angle = self.servo_center_angle
+            # ==================== STATE MACHINE CHO VIỆC RẼ ====================
+            if self.turn_state == TurnState.TURNING:
+                # Đang trong trạng thái RẼ - tiếp tục rẽ cho đến khi hoàn thành
+                elapsed = current_time - self.turn_start_time
+
+                if elapsed >= self.turn_duration:
+                    # Đã rẽ xong - quay về IDLE
+                    self.turn_state = TurnState.IDLE
+                    self.get_logger().info(
+                        f'✅ Hoàn thành rẽ {"trái" if self.turn_direction < 0 else "phải"} '
+                        f'sau {elapsed:.2f}s ({self.turn_distance}m)'
+                    )
+                    # Về servo giữa
+                    self.turn_servo_angle = self.servo_center_angle
                     cmd.linear.x = self.max_linear_speed
                 else:
-                    if error > 0.0:
-                        # lệch sang phải -> quay phải
-                        target_angle = self.servo_right_angle
-                    else:
-                        # lệch sang trái -> quay trái
-                        target_angle = self.servo_left_angle
-                    cmd.linear.x = self.max_linear_speed * self.cornering_speed_factor
+                    # Vẫn đang rẽ - giữ nguyên góc servo và tốc độ chậm
+                    cmd.linear.x = self.turn_speed
+                    remaining = self.turn_duration - elapsed
 
-                # Không dùng angular.z để quay servo nữa, để Arduino chỉ nhận góc qua S:angle
+                    # Log tiến trình rẽ (mỗi 0.5 giây)
+                    if int(elapsed * 2) != int((elapsed - dt) * 2):
+                        self.get_logger().info(
+                            f'🔄 Đang rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
+                            f'{elapsed:.1f}s/{self.turn_duration:.1f}s, '
+                            f'còn {remaining:.1f}s, servo={self.turn_servo_angle:.0f}°'
+                        )
+
+                # Gửi góc servo cố định trong suốt quá trình rẽ
                 cmd.angular.z = 0.0
-
-                # Gửi góc servo mong muốn (degree) cho Arduino bridge
-                self.last_servo_angle_deg = float(target_angle)
+                self.last_servo_angle_deg = float(self.turn_servo_angle)
                 self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
 
-                # Log định kỳ về lane detection (mỗi 2 giây)
-                current_time = self.get_clock().now().seconds_nanoseconds()[0]
-                if current_time - self.last_lane_log_time >= 2.0:
-                    self.get_logger().info(
-                        f'📷 Lane - Raw: {self.lane_center_offset:.2f}, '
-                        f'Smooth: {self.smoothed_lane_offset:.2f}, '
-                        f'ServoCmd: {self.last_servo_angle_deg:.1f} deg'
-                    )
-                    self.last_lane_log_time = current_time
             else:
-                # Khong phat hien duoc vach ke duong -> DUNG LAI (an toan hon la di thang)
-                cmd.linear.x = 0.0
-                cmd.angular.z = 0.0
-                if self.use_camera:
-                    # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
-                    current_time = self.get_clock().now().seconds_nanoseconds()[0]
+                # STATE = IDLE - xét xem có cần rẽ không
+                if self.use_camera and self.lane_detected:
+                    error = float(self.smoothed_lane_offset)
+
+                    # Kiểm tra có cần kích hoạt rẽ không (offset vượt ngưỡng)
+                    if abs(error) >= self.turn_trigger_threshold:
+                        # BẮT ĐẦU RẼ - chuyển sang trạng thái TURNING
+                        self.turn_state = TurnState.TURNING
+                        self.turn_start_time = current_time
+
+                        if error > 0.0:
+                            # Lệch sang phải -> rẽ phải
+                            self.turn_direction = 1
+                            self.turn_servo_angle = self.servo_right_angle
+                        else:
+                            # Lệch sang trái -> rẽ trái
+                            self.turn_direction = -1
+                            self.turn_servo_angle = self.servo_left_angle
+
+                        self.get_logger().info(
+                            f'🚗 Bắt đầu rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
+                            f'offset={error:.2f}, servo={self.turn_servo_angle:.0f}°, '
+                            f'duration={self.turn_duration:.2f}s'
+                        )
+
+                        # Gửi lệnh rẽ
+                        cmd.linear.x = self.turn_speed
+                        cmd.angular.z = 0.0
+                        self.last_servo_angle_deg = float(self.turn_servo_angle)
+                        self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
+
+                    elif abs(error) < self.lane_dead_zone:
+                        # Đi thẳng - không cần rẽ
+                        cmd.linear.x = self.max_linear_speed
+                        cmd.angular.z = 0.0
+                        self.last_servo_angle_deg = float(self.servo_center_angle)
+                        self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
+
+                    else:
+                        # Offset nhỏ - điều chỉnh nhẹ (giữa dead_zone và trigger_threshold)
+                        # Vẫn chạy thẳng với tốc độ giảm nhẹ, servo về giữa
+                        cmd.linear.x = self.max_linear_speed * 0.8
+                        cmd.angular.z = 0.0
+                        self.last_servo_angle_deg = float(self.servo_center_angle)
+                        self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
+
+                    # Log định kỳ về lane detection (mỗi 2 giây)
                     if current_time - self.last_lane_log_time >= 2.0:
-                        self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
+                        state_str = "TURNING" if self.turn_state == TurnState.TURNING else "IDLE"
+                        self.get_logger().info(
+                            f'📷 [{state_str}] Lane - Raw: {self.lane_center_offset:.2f}, '
+                            f'Smooth: {self.smoothed_lane_offset:.2f}, '
+                            f'Trigger: {self.turn_trigger_threshold}, '
+                            f'ServoCmd: {self.last_servo_angle_deg:.1f}°'
+                        )
                         self.last_lane_log_time = current_time
+                else:
+                    # Không phát hiện được vạch kẻ đường -> DỪNG LẠI (an toàn hơn là đi thẳng)
+                    cmd.linear.x = 0.0
+                    cmd.angular.z = 0.0
+                    if self.use_camera:
+                        # Log định kỳ khi không phát hiện lane (mỗi 2 giây)
+                        if current_time - self.last_lane_log_time >= 2.0:
+                            self.get_logger().warn('📷 Khong phat hien lan duong - DUNG LAI')
+                            self.last_lane_log_time = current_time
         
         self.cmd_vel_pub.publish(cmd)
 

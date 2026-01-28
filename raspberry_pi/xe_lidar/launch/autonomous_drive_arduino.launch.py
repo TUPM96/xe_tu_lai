@@ -197,6 +197,25 @@ def generate_launch_description():
         description='He so giam toc khi vao cua (0.0-1.0), vi du 0.6 = 60% toc do'
     )
 
+    # Tham số state machine cho việc rẽ (hard-coded turn)
+    turn_distance_arg = DeclareLaunchArgument(
+        'turn_distance',
+        default_value='0.5',
+        description='Khoang cach re (m) - chay 50cm roi moi xet tiep'
+    )
+
+    turn_speed_arg = DeclareLaunchArgument(
+        'turn_speed',
+        default_value='0.2',
+        description='Toc do khi re (m/s)'
+    )
+
+    turn_trigger_threshold_arg = DeclareLaunchArgument(
+        'turn_trigger_threshold',
+        default_value='0.3',
+        description='Nguong offset de kich hoat re (0.0-1.0)'
+    )
+
     arduino_bridge_node = Node(
         package=package_name,
         executable='arduino_bridge.py',
@@ -239,6 +258,10 @@ def generate_launch_description():
             'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
             'lane_dead_zone': LaunchConfiguration('lane_dead_zone'),
             'cornering_speed_factor': LaunchConfiguration('cornering_speed_factor'),
+            # Tham số state machine cho việc rẽ
+            'turn_distance': LaunchConfiguration('turn_distance'),
+            'turn_speed': LaunchConfiguration('turn_speed'),
+            'turn_trigger_threshold': LaunchConfiguration('turn_trigger_threshold'),
         }]
     )
     
@@ -276,6 +299,9 @@ def generate_launch_description():
         front_angle_range_arg,
         kp_arg,
         cornering_speed_factor_arg,
+        turn_distance_arg,
+        turn_speed_arg,
+        turn_trigger_threshold_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,
