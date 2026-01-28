@@ -31,12 +31,14 @@ class AutonomousDrive(Node):
         self.declare_parameter('camera_topic', '/camera/image_raw')  # Topic camera
         self.declare_parameter('max_steer_angle', 0.5236)  # Góc lái tối đa (rad) ~30 degrees
         self.declare_parameter('debug_camera', False)  # Hiển thị debug camera output
-        # Tham số PID cho điều khiển bám làn (có thể truyền từ launch / start_autonomous)
+        # Tham số điều khiển bám làn (P thuần)
         self.declare_parameter('kp', 0.5)
-        self.declare_parameter('ki', 0.0)
-        self.declare_parameter('kd', 0.0)
-        # Tham số lane detection - C càng cao thì chỉ nhận màu đen hơn (loại bỏ xám)
-        self.declare_parameter('lane_threshold_c', 25)  # Giá trị C trong adaptive threshold
+        # Tham số lane detection
+        # Ngưỡng nhị phân cho vạch (tối trên nền sáng)
+        self.declare_parameter('binary_threshold', 70)
+        # Kích thước contour tối thiểu để coi là vạch
+        self.declare_parameter('contour_min_height', 30)
+        self.declare_parameter('contour_min_area', 500)
         # Tham số làm mượt (smoothing) để tránh phản ứng quá nhanh
         self.declare_parameter('lane_offset_smoothing', 0.7)  # 0.0=không smooth, 0.9=rất smooth
         self.declare_parameter('lane_dead_zone', 0.05)  # Vùng chết - bỏ qua offset nhỏ hơn giá trị này
@@ -53,14 +55,12 @@ class AutonomousDrive(Node):
         self.max_steer_angle = self.get_parameter('max_steer_angle').value
         self.debug_camera = self.get_parameter('debug_camera').value
         self.kp = float(self.get_parameter('kp').value)
-        self.ki = float(self.get_parameter('ki').value)
-        self.kd = float(self.get_parameter('kd').value)
-        self.lane_threshold_c = int(self.get_parameter('lane_threshold_c').value)
+        self.binary_threshold = int(self.get_parameter('binary_threshold').value)
+        self.contour_min_height = int(self.get_parameter('contour_min_height').value)
+        self.contour_min_area = int(self.get_parameter('contour_min_area').value)
         self.lane_offset_smoothing = float(self.get_parameter('lane_offset_smoothing').value)
         self.lane_dead_zone = float(self.get_parameter('lane_dead_zone').value)
         self.cornering_speed_factor = float(self.get_parameter('cornering_speed_factor').value)
-        self.lane_error_integral = 0.0
-        self.lane_error_prev = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
         # Lưu contour lane của frame trước để tăng ổn định
@@ -253,9 +253,13 @@ class AutonomousDrive(Node):
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-            # Ngưỡng nhị phân (vạch tối trên nền sáng)
-            # Có thể tinh chỉnh thêm bằng lane_threshold_c nếu cần
-            _, mask = cv2.threshold(blur, 70, 255, cv2.THRESH_BINARY_INV)
+            # Ngưỡng nhị phân (vạch tối trên nền sáng) - có thể chỉnh qua binary_threshold
+            _, mask = cv2.threshold(
+                blur,
+                self.binary_threshold,
+                255,
+                cv2.THRESH_BINARY_INV
+            )
 
             # Đóng morphology để nối các đoạn đứt
             kernel = np.ones((5, 5), np.uint8)
@@ -273,8 +277,8 @@ class AutonomousDrive(Node):
             if len(contours) > 0:
                 for contour in contours:
                     x, y, w, h = cv2.boundingRect(contour)
-                    # Lọc bỏ nhiễu nhỏ
-                    if h > 30 and cv2.contourArea(contour) > 500:
+                    # Lọc bỏ nhiễu nhỏ bằng tham số contour_min_height/area
+                    if h > self.contour_min_height and cv2.contourArea(contour) > self.contour_min_area:
                         cx = x + w // 2
                         if cx < center_x:
                             left_contour = contour

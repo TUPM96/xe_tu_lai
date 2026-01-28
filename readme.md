@@ -369,8 +369,9 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
     lane_offset_smoothing:=0.7 \
     lane_dead_zone:=0.05 \
     kp:=0.5 \
-    ki:=0.0 \
-    kd:=0.0 \
+    binary_threshold:=70 \
+    contour_min_height:=30 \
+    contour_min_area:=500 \
     use_lidar:=true \
     use_camera:=true \
     lidar_serial_port:=/dev/ttyUSB0 \
@@ -390,10 +391,11 @@ ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
 | `safe_distance` | 0.8 | Khoảng cách an toàn để tránh (m) |
 | `lane_threshold_c` | 25 | Ngưỡng lane detection (cao = chỉ nhận đen) |
 | `lane_offset_smoothing` | 0.7 | Hệ số làm mượt (0.0-0.95) |
-| `lane_dead_zone` | 0.05 | Vùng chết offset |
-| `kp` | 0.5 | Hệ số P (PID) |
-| `ki` | 0.0 | Hệ số I (PID) |
-| `kd` | 0.0 | Hệ số D (PID) |
+| `lane_dead_zone` | 0.05 | Vùng chết offset (P thuần) |
+| `kp` | 0.5 | Hệ số P cho bám làn (P thuần) |
+| `binary_threshold` | 70 | Ngưỡng nhị phân cho vạch đen (0–255) |
+| `contour_min_height` | 30 | Chiều cao tối thiểu contour để coi là vạch |
+| `contour_min_area` | 500 | Diện tích tối thiểu contour để coi là vạch |
 | `front_angle_range` | 60 | Góc LiDAR phía trước để kiểm tra vật cản (độ) |
 | `cornering_speed_factor` | 0.6 | Hệ số giảm tốc khi vào cua (0.0–1.0) |
 | `use_lidar` | true | Bật/tắt LiDAR trong node tự lái (true/false) |

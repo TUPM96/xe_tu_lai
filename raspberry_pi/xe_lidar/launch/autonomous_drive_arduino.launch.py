@@ -182,23 +182,30 @@ def generate_launch_description():
         description='Goc phia truoc (degrees) dung de kiem tra vat can bang LiDAR'
     )
 
-    # Tham số PID cho bám làn
+    # Tham số điều khiển P cho bám làn
     kp_arg = DeclareLaunchArgument(
         'kp',
         default_value='0.5',
         description='He so P cho PID bam lan'
     )
 
-    ki_arg = DeclareLaunchArgument(
-        'ki',
-        default_value='0.0',
-        description='He so I cho PID bam lan'
+    # Tham số cho lane detection theo contour
+    binary_threshold_arg = DeclareLaunchArgument(
+        'binary_threshold',
+        default_value='70',
+        description='Nguong nhi phan cho vach den (0-255)'
     )
 
-    kd_arg = DeclareLaunchArgument(
-        'kd',
-        default_value='0.0',
-        description='He so D cho PID bam lan'
+    contour_min_height_arg = DeclareLaunchArgument(
+        'contour_min_height',
+        default_value='30',
+        description='Chieu cao toi thieu cua contour de coi la vach'
+    )
+
+    contour_min_area_arg = DeclareLaunchArgument(
+        'contour_min_area',
+        default_value='500',
+        description='Dien tich toi thieu cua contour de coi la vach'
     )
 
     # Hệ số giảm tốc khi vào cua (khi đang đánh lái)
@@ -241,10 +248,12 @@ def generate_launch_description():
             'use_lidar': LaunchConfiguration('use_lidar'),
             'use_camera': LaunchConfiguration('use_camera'),
             'camera_topic': '/camera/image_raw',
-            # Tham số PID cho bám làn
+            # Tham số điều khiển P cho bám làn
             'kp': LaunchConfiguration('kp'),
-            'ki': LaunchConfiguration('ki'),
-            'kd': LaunchConfiguration('kd'),
+            # Tham số lane detection contour
+            'binary_threshold': LaunchConfiguration('binary_threshold'),
+            'contour_min_height': LaunchConfiguration('contour_min_height'),
+            'contour_min_area': LaunchConfiguration('contour_min_area'),
             'lane_threshold_c': LaunchConfiguration('lane_threshold_c'),
             # Tham số làm mượt để tránh giật góc lái
             'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
@@ -286,8 +295,9 @@ def generate_launch_description():
         use_camera_arg,
         front_angle_range_arg,
         kp_arg,
-        ki_arg,
-        kd_arg,
+        binary_threshold_arg,
+        contour_min_height_arg,
+        contour_min_area_arg,
         cornering_speed_factor_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
