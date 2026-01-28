@@ -356,21 +356,71 @@ Sau khi test xong tất cả phần cứng, chạy hệ thống tự lái:
 cd ~/ros2_ws
 source install/setup.bash
 
-# Chạy tất cả bằng script
-ros2 run xe_lidar start_all.py
+# Chạy với giá trị mặc định
+python3 src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py
 
-# Hoặc chỉ định port cụ thể
-ros2 run xe_lidar start_all.py \
-    --lidar-port /dev/ttyUSB0 \
-    --arduino-port /dev/ttyACM0 \
-    --camera-device /dev/video0
+# Chạy với ĐẦY ĐỦ tham số
+python3 src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py \
+    --speed 0.3 \
+    --pwm 100 \
+    --threshold 25 \
+    --smooth 0.7 \
+    --deadzone 0.05 \
+    --kp 0.5 \
+    --ki 0.0 \
+    --kd 0.0 \
+    --lidar /dev/ttyUSB0 \
+    --arduino /dev/ttyACM0 \
+    --camera /dev/video0
+
+# Xem tất cả tham số
+python3 src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py --help
 ```
 
-**Hoặc dùng launch file:**
+**Tham số có thể cấu hình:**
+
+| Tham số | Mặc định | Mô tả |
+|---------|----------|-------|
+| `--speed`, `-s` | 0.3 | Tốc độ tối đa (m/s) |
+| `--pwm`, `-p` | 100 | PWM tối thiểu motor (0-255) |
+| `--threshold`, `-t` | 25 | Ngưỡng lane detection (cao = chỉ nhận đen) |
+| `--smooth` | 0.7 | Hệ số làm mượt (0.0-0.95) |
+| `--deadzone` | 0.05 | Vùng chết offset |
+| `--kp` | 0.5 | Hệ số P (PID) |
+| `--ki` | 0.0 | Hệ số I (PID) |
+| `--kd` | 0.0 | Hệ số D (PID) |
+| `--lidar` | /dev/ttyUSB0 | Port LiDAR |
+| `--arduino` | /dev/ttyACM0 | Port Arduino |
+| `--camera` | /dev/video0 | Device camera |
+
+**Ví dụ thực tế:**
+```bash
+# Xe giật nhiều -> tăng smoothing
+python3 start_autonomous.py --smooth 0.85
+
+# Chỉ nhận vạch đen đậm (loại bỏ xám)
+python3 start_autonomous.py --threshold 35
+
+# Tăng tốc độ
+python3 start_autonomous.py --speed 0.5 --pwm 120
+
+# Điều chỉnh PID
+python3 start_autonomous.py --kp 0.7 --ki 0.01 --kd 0.1
+```
+
+**Hoặc dùng launch file trực tiếp (đầy đủ tham số):**
 ```bash
 ros2 launch xe_lidar autonomous_drive_arduino.launch.py \
-    arduino_serial_port:=/dev/ttyACM0 \
+    max_linear_speed:=0.3 \
+    motor_min_pwm:=100 \
+    lane_threshold_c:=25 \
+    lane_offset_smoothing:=0.7 \
+    lane_dead_zone:=0.05 \
+    kp:=0.5 \
+    ki:=0.0 \
+    kd:=0.0 \
     lidar_serial_port:=/dev/ttyUSB0 \
+    arduino_serial_port:=/dev/ttyACM0 \
     video_device:=/dev/video0
 ```
 
@@ -405,11 +455,14 @@ ros2 run xe_lidar start_arduino.py --port /dev/ttyACM0
 
 **Terminal 5 - Autonomous Drive:**
 ```bash
-ros2 run xe_lidar start_autonomous.py
+# Chạy với giá trị mặc định
+python3 ~/ros2_ws/src/xe_tu_lai/raspberry_pi/xe_lidar/scripts/start_autonomous.py
 
-# Hoặc với options
-ros2 run xe_lidar start_autonomous.py --max-speed 0.5 --safe-distance 1.0
-ros2 run xe_lidar start_autonomous.py --no-camera  # Không dùng camera
+# Hoặc với tham số tùy chỉnh
+python3 start_autonomous.py --speed 0.3 --smooth 0.7 --threshold 25
+
+# Xem tất cả tham số
+python3 start_autonomous.py --help
 ```
 
 ### Cách 3: Chạy bằng launch files (Cách cũ)

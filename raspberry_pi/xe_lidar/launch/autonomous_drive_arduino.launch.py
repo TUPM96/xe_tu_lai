@@ -149,6 +149,25 @@ def generate_launch_description():
         description='Vung chet - bo qua offset nho hon gia tri nay'
     )
 
+    # Tham số PID cho bám làn
+    kp_arg = DeclareLaunchArgument(
+        'kp',
+        default_value='0.5',
+        description='He so P cho PID bam lan'
+    )
+
+    ki_arg = DeclareLaunchArgument(
+        'ki',
+        default_value='0.0',
+        description='He so I cho PID bam lan'
+    )
+
+    kd_arg = DeclareLaunchArgument(
+        'kd',
+        default_value='0.0',
+        description='He so D cho PID bam lan'
+    )
+
     arduino_bridge_node = Node(
         package=package_name,
         executable='arduino_bridge.py',
@@ -181,10 +200,10 @@ def generate_launch_description():
             'front_angle_range': 60,
             'use_camera': True,
             'camera_topic': '/camera/image_raw',
-            # Tham số PID cho bám làn (có thể override khi launch: kp:=..., ki:=..., kd:=...)
-            'kp': 0.5,
-            'ki': 0.0,
-            'kd': 0.0,
+            # Tham số PID cho bám làn
+            'kp': LaunchConfiguration('kp'),
+            'ki': LaunchConfiguration('ki'),
+            'kd': LaunchConfiguration('kd'),
             'lane_threshold_c': LaunchConfiguration('lane_threshold_c'),
             # Tham số làm mượt để tránh giật góc lái
             'lane_offset_smoothing': LaunchConfiguration('lane_offset_smoothing'),
@@ -219,6 +238,9 @@ def generate_launch_description():
         lane_threshold_c_arg,
         lane_offset_smoothing_arg,
         lane_dead_zone_arg,
+        kp_arg,
+        ki_arg,
+        kd_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,
