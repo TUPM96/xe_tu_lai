@@ -18,37 +18,46 @@ class CameraNode(Node):
         
         # Parameters
         self.declare_parameter('video_device', '/dev/video0')
-        self.declare_parameter('width', 640)
-        self.declare_parameter('height', 480)
+        self.declare_parameter('width', 0)  # 0 = auto (full resolution)
+        self.declare_parameter('height', 0)  # 0 = auto (full resolution)
         self.declare_parameter('fps', 30)
         self.declare_parameter('frame_id', 'camera_link_optical')
-        
+
         video_device = self.get_parameter('video_device').value
         width = self.get_parameter('width').value
         height = self.get_parameter('height').value
         fps = self.get_parameter('fps').value
         self.frame_id = self.get_parameter('frame_id').value
-        
+
         # Khởi tạo camera
         self.cap = cv2.VideoCapture(video_device)
         if not self.cap.isOpened():
             self.get_logger().error(f'Không thể mở camera tại {video_device}')
             sys.exit(1)
-        
+
         # Cấu hình camera
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        if width > 0 and height > 0:
+            # Set resolution theo tham số
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        # Nếu width=0 hoặc height=0, dùng resolution mặc định của camera (thường là full)
+
         self.cap.set(cv2.CAP_PROP_FPS, fps)
-        
-        self.get_logger().info(f'Camera đã mở tại {video_device} ({width}x{height} @ {fps}fps)')
+
+        # Lấy resolution thực tế từ camera
+        actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+
+        self.get_logger().info(f'Camera đã mở tại {video_device} ({actual_width}x{actual_height} @ {actual_fps}fps)')
         
         # Publishers
         self.image_publisher = self.create_publisher(Image, '/camera/image_raw', 10)
         self.camera_info_publisher = self.create_publisher(CameraInfo, '/camera/camera_info', 10)
-        
-        # Lưu lại width và height để dùng trong camera_info
-        self.width = width
-        self.height = height
+
+        # Lưu lại width và height thực tế để dùng trong camera_info
+        self.width = actual_width
+        self.height = actual_height
         
         # Tạo CameraInfo message với tham số mặc định (có thể calibrate sau)
         self.camera_info = self.create_camera_info()

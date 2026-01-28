@@ -45,11 +45,13 @@ install(PROGRAMS
   scripts/arduino_bridge.py
   scripts/camera_node.py
   scripts/scan_filter.py
+  scripts/lane_detection_node.py
   scripts/start_lidar.py
   scripts/start_camera.py
   scripts/start_arduino.py
   scripts/start_autonomous.py
   scripts/start_robot_description.py
+  scripts/start_lane_detection.py
   scripts/start_all.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -60,11 +62,13 @@ install(PROGRAMS
   scripts/arduino_bridge.py
   scripts/camera_node.py
   scripts/scan_filter.py
+  scripts/lane_detection_node.py
   scripts/start_lidar.py
   scripts/start_camera.py
   scripts/start_arduino.py
   scripts/start_autonomous.py
   scripts/start_robot_description.py
+  scripts/start_lane_detection.py
   scripts/start_all.py
   DESTINATION libexec/${PROJECT_NAME}
 )
