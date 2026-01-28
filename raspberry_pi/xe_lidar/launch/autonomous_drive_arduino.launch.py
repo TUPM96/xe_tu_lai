@@ -133,14 +133,14 @@ def generate_launch_description():
     # Tham số khoảng cách an toàn LiDAR
     min_distance_arg = DeclareLaunchArgument(
         'min_distance',
-        default_value='0.5',
-        description='Khoang cach toi thieu de dung (m)'
+        default_value='0.4',
+        description='Khoang cach toi thieu de dung (m) - mac dinh 40cm'
     )
 
     safe_distance_arg = DeclareLaunchArgument(
         'safe_distance',
-        default_value='0.8',
-        description='Khoang cach an toan de tranh vat can (m)'
+        default_value='0.4',
+        description='Khoang cach an toan de tranh vat can (m) - mac dinh 40cm'
     )
 
     lane_threshold_c_arg = DeclareLaunchArgument(

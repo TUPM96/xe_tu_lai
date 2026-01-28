@@ -31,8 +31,8 @@ class AutonomousDrive(Node):
         
         # Parameters
         # Note: use_sim_time is set by launch file, don't declare it here
-        self.declare_parameter('min_distance', 0.5)  # Khoảng cách tối thiểu để dừng (m)
-        self.declare_parameter('safe_distance', 0.8)  # Khoảng cách an toàn để tránh (m)
+        self.declare_parameter('min_distance', 0.4)  # Khoảng cách tối thiểu để dừng (m) - 40cm
+        self.declare_parameter('safe_distance', 0.4)  # Khoảng cách an toàn để tránh (m) - 40cm
         self.declare_parameter('max_linear_speed', 1.0)  # Tốc độ tối đa (m/s) - PWM 255
         self.declare_parameter('max_angular_speed', 1.0)  # Tốc độ quay tối đa (rad/s)
         self.declare_parameter('front_angle_range', 60)  # Góc phía trước để kiểm tra (degrees)
@@ -221,6 +221,8 @@ class AutonomousDrive(Node):
         # Tìm các điểm trong vùng phía trước
         num_points = len(ranges)
         front_indices = []
+        left_indices = []
+        right_indices = []
         
         for i in range(num_points):
             angle = angle_min + i * angle_increment
@@ -229,6 +231,10 @@ class AutonomousDrive(Node):
                 if not (np.isinf(ranges[i]) or np.isnan(ranges[i])):
                     if ranges[i] < scan.range_max and ranges[i] > scan.range_min:
                         front_indices.append((i, ranges[i], angle))
+                        if angle < 0:
+                            left_indices.append((i, ranges[i], angle))
+                        else:
+                            right_indices.append((i, ranges[i], angle))
         
         if not front_indices:
             self.obstacle_detected = False
@@ -256,7 +262,17 @@ class AutonomousDrive(Node):
                 # Vật cản ở cả hai bên, quay lại
                 self.obstacle_direction = 0
         else:
-            self.obstacle_detected = False
+            # Kiểm tra kỹ hơn: không có vật cản ở phía trước VÀ cả hai bên đều an toàn
+            left_safe = all([item[1] >= self.safe_distance * 1.2 for item in left_indices]) if left_indices else True
+            right_safe = all([item[1] >= self.safe_distance * 1.2 for item in right_indices]) if right_indices else True
+            
+            # Chỉ coi là không có vật cản khi cả phía trước và hai bên đều an toàn
+            # Với safe_distance = 40cm, kiểm tra ở khoảng cách 50cm để đảm bảo an toàn
+            if min_distance >= self.safe_distance * 1.25 and left_safe and right_safe:
+                self.obstacle_detected = False
+            else:
+                # Vẫn còn vật cản gần
+                self.obstacle_detected = True
     
     def cv2_to_imgmsg(self, cv_image, encoding="bgr8"):
         """Convert OpenCV image sang ROS2 Image message"""
@@ -654,7 +670,8 @@ class AutonomousDrive(Node):
                 self.obstacle_clear_count = 0
                 
                 if self.obstacle_avoidance_state == ObstacleAvoidanceState.NORMAL:
-                    # Bắt đầu tránh vật cản
+                    # Bắt đầu tránh vật cản - reset quãng đường
+                    self.avoidance_distance = 0.0
                     if self.obstacle_direction < 0:
                         # Vat can ben trai -> re phai (155 do)
                         self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_RIGHT
@@ -685,6 +702,8 @@ class AutonomousDrive(Node):
                     self.smoothed_servo_angle_deg = 45.0
                     self.last_servo_angle_deg = 45.0
                     self.servo_angle_pub.publish(Float32(data=45.0))
+                    # Tích lũy quãng đường đã đi
+                    self.avoidance_distance += cmd.linear.x * dt
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_RIGHT:
                     # Dang tranh bang cach re phai (155 do) - tiep tuc giu goc
                     cmd.linear.x = self.max_linear_speed * 0.6
@@ -692,22 +711,47 @@ class AutonomousDrive(Node):
                     self.smoothed_servo_angle_deg = 155.0
                     self.last_servo_angle_deg = 155.0
                     self.servo_angle_pub.publish(Float32(data=155.0))
+                    # Tích lũy quãng đường đã đi
+                    self.avoidance_distance += cmd.linear.x * dt
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.RETURNING:
-                    # Dang quay ve di thang - tiep tuc giu goc giua
-                    cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
+                    # Dang quay ve di thang nhung lai gap vat can -> quay lai tranh
+                    # Reset và bắt đầu tránh lại
+                    self.avoidance_distance = 0.0
+                    if self.obstacle_direction < 0:
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_RIGHT
+                        avoid_servo_angle = 155.0
+                        self.get_logger().info('⚠️ Gap vat can khi quay ve - Re phai 155° de tranh')
+                    elif self.obstacle_direction > 0:
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_LEFT
+                        avoid_servo_angle = 45.0
+                        self.get_logger().info('⚠️ Gap vat can khi quay ve - Re trai 45° de tranh')
+                    else:
+                        self.obstacle_avoidance_state = ObstacleAvoidanceState.AVOIDING_RIGHT
+                        avoid_servo_angle = 155.0
+                        cmd.linear.x = -self.max_linear_speed * 0.5
+                        self.get_logger().info('⚠️ Gap vat can khi quay ve - Lui lai va re phai 155°')
+                    
+                    self.smoothed_servo_angle_deg = avoid_servo_angle
+                    self.last_servo_angle_deg = avoid_servo_angle
+                    self.servo_angle_pub.publish(Float32(data=avoid_servo_angle))
+                    if cmd.linear.x == 0.0:
+                        cmd.linear.x = self.max_linear_speed * 0.6
                     cmd.angular.z = 0.0
-                    self.smoothed_servo_angle_deg = self.servo_center_angle
-                    self.last_servo_angle_deg = self.servo_center_angle
-                    self.servo_angle_pub.publish(Float32(data=self.servo_center_angle))
             else:
                 # Khong co vat can
                 if self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_LEFT:
-                    # Da qua vat can ben phai -> quay ve di thang (re phai lai)
+                    # Da qua vat can ben phai -> tiep tuc di va kiem tra dieu kien quay ve
                     self.obstacle_clear_count += 1
-                    if self.obstacle_clear_count >= self.obstacle_clear_threshold:
+                    # Tích lũy quãng đường đã đi
+                    self.avoidance_distance += cmd.linear.x * dt if cmd.linear.x > 0 else 0
+                    
+                    # Điều kiện quay về: đã đi đủ xa VÀ không có vật cản trong một khoảng thời gian
+                    if self.avoidance_distance >= self.avoidance_distance_threshold and \
+                       self.obstacle_clear_count >= self.obstacle_clear_threshold:
                         self.obstacle_avoidance_state = ObstacleAvoidanceState.RETURNING
-                        self.get_logger().info('✅ Da qua vat can - Quay ve di thang (re phai lai)')
+                        self.get_logger().info(f'✅ Da qua vat can ({self.avoidance_distance:.2f}m) - Quay ve di thang (re phai lai)')
                         self.obstacle_clear_count = 0
+                        self.avoidance_distance = 0.0
                     # Tiep tuc giu goc 45 do cho den khi chuyen sang RETURNING
                     cmd.linear.x = self.max_linear_speed * 0.6
                     cmd.angular.z = 0.0
@@ -715,12 +759,18 @@ class AutonomousDrive(Node):
                     self.last_servo_angle_deg = 45.0
                     self.servo_angle_pub.publish(Float32(data=45.0))
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.AVOIDING_RIGHT:
-                    # Da qua vat can ben trai -> quay ve di thang (re trai lai)
+                    # Da qua vat can ben trai -> tiep tuc di va kiem tra dieu kien quay ve
                     self.obstacle_clear_count += 1
-                    if self.obstacle_clear_count >= self.obstacle_clear_threshold:
+                    # Tích lũy quãng đường đã đi
+                    self.avoidance_distance += cmd.linear.x * dt if cmd.linear.x > 0 else 0
+                    
+                    # Điều kiện quay về: đã đi đủ xa VÀ không có vật cản trong một khoảng thời gian
+                    if self.avoidance_distance >= self.avoidance_distance_threshold and \
+                       self.obstacle_clear_count >= self.obstacle_clear_threshold:
                         self.obstacle_avoidance_state = ObstacleAvoidanceState.RETURNING
-                        self.get_logger().info('✅ Da qua vat can - Quay ve di thang (re trai lai)')
+                        self.get_logger().info(f'✅ Da qua vat can ({self.avoidance_distance:.2f}m) - Quay ve di thang (re trai lai)')
                         self.obstacle_clear_count = 0
+                        self.avoidance_distance = 0.0
                     # Tiep tuc giu goc 155 do cho den khi chuyen sang RETURNING
                     cmd.linear.x = self.max_linear_speed * 0.6
                     cmd.angular.z = 0.0
@@ -730,10 +780,16 @@ class AutonomousDrive(Node):
                 elif self.obstacle_avoidance_state == ObstacleAvoidanceState.RETURNING:
                     # Dang quay ve di thang - tiep tuc di thang
                     self.obstacle_clear_count += 1
-                    if self.obstacle_clear_count >= self.obstacle_clear_threshold:
+                    # Tích lũy quãng đường đã đi khi quay về
+                    self.avoidance_distance += cmd.linear.x * dt if cmd.linear.x > 0 else 0
+                    
+                    # Đi một đoạn đủ dài trước khi về chế độ bình thường
+                    if self.obstacle_clear_count >= self.obstacle_clear_threshold and \
+                       self.avoidance_distance >= self.avoidance_distance_threshold:
                         self.obstacle_avoidance_state = ObstacleAvoidanceState.NORMAL
                         self.get_logger().info('✅ Da quay ve di thang - Che do binh thuong')
                         self.obstacle_clear_count = 0
+                        self.avoidance_distance = 0.0
                     cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
                     cmd.angular.z = 0.0
                     self.smoothed_servo_angle_deg = self.servo_center_angle
