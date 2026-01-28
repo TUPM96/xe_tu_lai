@@ -404,10 +404,11 @@ class AutonomousDrive(Node):
                     direction_text = "Di thang"
                     direction_color = (0, 255, 0)  # Xanh la
                 elif steering_offset > 0:
-                    direction_text = f"Re trai ({abs(steering_offset):.2f})"
+                    # Đảo text cho đúng thực tế: offset dương = rẽ PHẢI
+                    direction_text = f"Re phai ({abs(steering_offset):.2f})"
                     direction_color = (255, 165, 0)  # Mau cam
                 else:
-                    direction_text = f"Re phai ({abs(steering_offset):.2f})"
+                    direction_text = f"Re trai ({abs(steering_offset):.2f})"
                     direction_color = (255, 165, 0)  # Mau cam
                 
                 cv2.putText(image_with_lanes, direction_text, (10, 90), 
