@@ -10,16 +10,17 @@ from sensor_msgs.msg import Image, CameraInfo
 import cv2
 import numpy as np
 import sys
+import time
 
 
 class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
-        
-        # Parameters - Mặc định 1920x1080 (Full HD)
+
+        # Parameters - Mặc định 1280x720 (HD)
         self.declare_parameter('video_device', '/dev/video0')
-        self.declare_parameter('width', 1920)  # Mặc định Full HD
-        self.declare_parameter('height', 1080)  # Mặc định Full HD
+        self.declare_parameter('width', 1280)  # Mặc định HD
+        self.declare_parameter('height', 720)  # Mặc định HD
         self.declare_parameter('fps', 30)
         self.declare_parameter('frame_id', 'camera_link_optical')
 
@@ -50,8 +51,11 @@ class CameraNode(Node):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
 
-        # Set buffer size nhỏ để giảm latency
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        # Set buffer size = 2 để tránh timeout nhưng vẫn giảm latency
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+
+        # Đợi camera ổn định sau khi set resolution
+        time.sleep(0.5)
 
         # Lấy resolution thực tế từ camera
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -59,6 +63,21 @@ class CameraNode(Node):
         actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
 
         self.get_logger().info(f'Camera đã mở tại {video_device} ({actual_width}x{actual_height} @ {actual_fps}fps)')
+
+        # Warmup: Đọc và bỏ một số frame đầu để camera ổn định
+        self.get_logger().info('Camera warmup - dang doc frames de on dinh...')
+        warmup_success = 0
+        for i in range(10):
+            ret, _ = self.cap.read()
+            if ret:
+                warmup_success += 1
+            time.sleep(0.1)
+
+        if warmup_success == 0:
+            self.get_logger().error('Camera khong doc duoc frame nao trong warmup!')
+            sys.exit(1)
+        else:
+            self.get_logger().info(f'Warmup hoan tat: {warmup_success}/10 frames OK')
         
         # Publishers
         self.image_publisher = self.create_publisher(Image, '/camera/image_raw', 10)
@@ -136,25 +155,39 @@ class CameraNode(Node):
         return camera_info
     
     def timer_callback(self):
-        ret, frame = self.cap.read()
-        if ret:
+        # Thử đọc frame với retry
+        ret = False
+        frame = None
+        for attempt in range(3):
+            ret, frame = self.cap.read()
+            if ret:
+                break
+            time.sleep(0.01)  # Đợi 10ms rồi thử lại
+
+        if ret and frame is not None:
             try:
                 # Convert OpenCV image sang ROS2 Image message (KHÔNG CẦN cv_bridge)
                 ros_image = self.cv2_to_imgmsg(frame, "bgr8")
                 current_time = self.get_clock().now().to_msg()
                 ros_image.header.stamp = current_time
                 ros_image.header.frame_id = self.frame_id
-                
+
                 # Publish image
                 self.image_publisher.publish(ros_image)
-                
+
                 # Publish camera_info (đồng bộ với image)
                 self.camera_info.header.stamp = current_time
                 self.camera_info_publisher.publish(self.camera_info)
+
+                # Reset error count khi thành công
+                self.consecutive_errors = 0
             except Exception as e:
                 self.get_logger().error(f'Lỗi convert ảnh: {str(e)}')
         else:
-            self.get_logger().warn('Không đọc được frame từ camera')
+            self.consecutive_errors = getattr(self, 'consecutive_errors', 0) + 1
+            # Chỉ log mỗi 10 lỗi liên tiếp để tránh spam
+            if self.consecutive_errors % 10 == 1:
+                self.get_logger().warn(f'Khong doc duoc frame tu camera (lan thu {self.consecutive_errors})')
     
     def destroy_node(self):
         if self.cap:
