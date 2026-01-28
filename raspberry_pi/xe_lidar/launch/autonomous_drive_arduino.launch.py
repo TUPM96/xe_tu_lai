@@ -216,6 +216,12 @@ def generate_launch_description():
         description='Nguong offset de kich hoat re (0.0-1.0)'
     )
 
+    straight_speed_factor_arg = DeclareLaunchArgument(
+        'straight_speed_factor',
+        default_value='0.8',
+        description='He so toc do khi di thang (0.0-1.0), vi du 0.8 = 80% toc do'
+    )
+
     arduino_bridge_node = Node(
         package=package_name,
         executable='arduino_bridge.py',
@@ -262,6 +268,7 @@ def generate_launch_description():
             'turn_distance': LaunchConfiguration('turn_distance'),
             'turn_speed': LaunchConfiguration('turn_speed'),
             'turn_trigger_threshold': LaunchConfiguration('turn_trigger_threshold'),
+            'straight_speed_factor': LaunchConfiguration('straight_speed_factor'),
         }]
     )
     
@@ -302,6 +309,7 @@ def generate_launch_description():
         turn_distance_arg,
         turn_speed_arg,
         turn_trigger_threshold_arg,
+        straight_speed_factor_arg,
         rsp,
         joint_state_publisher_node,  # Thêm joint state publisher để RSP hiển thị khung xe
         laser_tf_node,

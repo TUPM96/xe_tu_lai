@@ -60,6 +60,7 @@ class AutonomousDrive(Node):
         self.declare_parameter('turn_distance', 0.5)        # Khoảng cách rẽ (m) - chạy 50cm rồi mới xét tiếp
         self.declare_parameter('turn_speed', 0.2)           # Tốc độ khi rẽ (m/s)
         self.declare_parameter('turn_trigger_threshold', 0.3)  # Ngưỡng offset để kích hoạt rẽ (0.0-1.0)
+        self.declare_parameter('straight_speed_factor', 0.8)  # Hệ số tốc độ khi đi thẳng (0.0-1.0)
 
         self.min_distance = self.get_parameter('min_distance').value
         self.safe_distance = self.get_parameter('safe_distance').value
@@ -83,6 +84,7 @@ class AutonomousDrive(Node):
         self.turn_distance = float(self.get_parameter('turn_distance').value)
         self.turn_speed = float(self.get_parameter('turn_speed').value)
         self.turn_trigger_threshold = float(self.get_parameter('turn_trigger_threshold').value)
+        self.straight_speed_factor = float(self.get_parameter('straight_speed_factor').value)
         self.last_servo_angle_deg = 0.0
         self.last_control_time = float(self.get_clock().now().seconds_nanoseconds()[0])
         self.smoothed_lane_offset = 0.0  # Offset đã được làm mượt
@@ -558,15 +560,16 @@ class AutonomousDrive(Node):
             else:
                 # STATE = IDLE - xét xem có cần rẽ không
                 if self.use_camera and self.lane_detected:
-                    error = float(self.smoothed_lane_offset)
+                    # Dùng RAW offset để trigger rẽ (phản ứng nhanh hơn)
+                    raw_error = float(self.lane_center_offset)
 
                     # Kiểm tra có cần kích hoạt rẽ không (offset vượt ngưỡng)
-                    if abs(error) >= self.turn_trigger_threshold:
+                    if abs(raw_error) >= self.turn_trigger_threshold:
                         # BẮT ĐẦU RẼ - chuyển sang trạng thái TURNING
                         self.turn_state = TurnState.TURNING
                         self.turn_start_time = current_time
 
-                        if error > 0.0:
+                        if raw_error > 0.0:
                             # Lệch sang phải -> rẽ phải
                             self.turn_direction = 1
                             self.turn_servo_angle = self.servo_right_angle
@@ -577,7 +580,7 @@ class AutonomousDrive(Node):
 
                         self.get_logger().info(
                             f'🚗 Bắt đầu rẽ {"trái" if self.turn_direction < 0 else "phải"}: '
-                            f'offset={error:.2f}, servo={self.turn_servo_angle:.0f}°, '
+                            f'raw_offset={raw_error:.2f}, servo={self.turn_servo_angle:.0f}°, '
                             f'duration={self.turn_duration:.2f}s'
                         )
 
@@ -587,17 +590,17 @@ class AutonomousDrive(Node):
                         self.last_servo_angle_deg = float(self.turn_servo_angle)
                         self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
 
-                    elif abs(error) < self.lane_dead_zone:
-                        # Đi thẳng - không cần rẽ
-                        cmd.linear.x = self.max_linear_speed
+                    elif abs(raw_error) < self.lane_dead_zone:
+                        # Đi thẳng - không cần rẽ (áp dụng straight_speed_factor)
+                        cmd.linear.x = self.max_linear_speed * self.straight_speed_factor
                         cmd.angular.z = 0.0
                         self.last_servo_angle_deg = float(self.servo_center_angle)
                         self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
 
                     else:
                         # Offset nhỏ - điều chỉnh nhẹ (giữa dead_zone và trigger_threshold)
-                        # Vẫn chạy thẳng với tốc độ giảm nhẹ, servo về giữa
-                        cmd.linear.x = self.max_linear_speed * 0.8
+                        # Vẫn chạy thẳng với tốc độ giảm nhẹ hơn nữa, servo về giữa
+                        cmd.linear.x = self.max_linear_speed * self.straight_speed_factor * 0.8
                         cmd.angular.z = 0.0
                         self.last_servo_angle_deg = float(self.servo_center_angle)
                         self.servo_angle_pub.publish(Float32(data=self.last_servo_angle_deg))
@@ -606,8 +609,7 @@ class AutonomousDrive(Node):
                     if current_time - self.last_lane_log_time >= 2.0:
                         state_str = "TURNING" if self.turn_state == TurnState.TURNING else "IDLE"
                         self.get_logger().info(
-                            f'📷 [{state_str}] Lane - Raw: {self.lane_center_offset:.2f}, '
-                            f'Smooth: {self.smoothed_lane_offset:.2f}, '
+                            f'📷 [{state_str}] Lane - Raw: {raw_error:.2f}, '
                             f'Trigger: {self.turn_trigger_threshold}, '
                             f'ServoCmd: {self.last_servo_angle_deg:.1f}°'
                         )
